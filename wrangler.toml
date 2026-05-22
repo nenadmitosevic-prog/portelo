@@ -1,0 +1,19 @@
+name = "portelo"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[site]
+bucket = "./pages"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "portelo-db"
+database_id = "placeholder-replace-after-create"
+
+[[r2_buckets]]
+binding = "BILLS_BUCKET"
+bucket_name = "portelo-bills"
+
+[vars]
+ENVIRONMENT = "development"

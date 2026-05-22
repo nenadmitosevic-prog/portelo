@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portelo — Vaš stambeni portal</title>
+  <link rel="stylesheet" href="/shared/ui/styles.css">
+  <style>
+    .landing {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .landing__logo {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+
+    .landing__tagline {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 48px;
+    }
+
+    .building-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      width: 100%;
+      max-width: 640px;
+      margin-bottom: 40px;
+    }
+
+    .building-card {
+      background: var(--card);
+      border: 1.5px solid var(--line);
+      border-radius: 16px;
+      padding: 32px 24px;
+      cursor: pointer;
+      transition: box-shadow 0.18s, border-color 0.18s, transform 0.12s;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .building-card:hover {
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      transform: translateY(-2px);
+    }
+
+    .building-card--gce:hover { border-color: var(--accent-gce); }
+    .building-card--ch:hover { border-color: var(--accent-ch); }
+
+    .building-card__logo {
+      width: 64px;
+      height: 64px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.75rem;
+      font-weight: 900;
+    }
+
+    .building-card--gce .building-card__logo {
+      background: #e4f1ea;
+      color: var(--accent-gce);
+    }
+
+    .building-card--ch .building-card__logo {
+      background: var(--soft-ch);
+      color: var(--accent-ch);
+    }
+
+    .building-card__name {
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--ink);
+    }
+
+    .building-card__desc {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .building-card__cta {
+      margin-top: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .building-card--gce .building-card__cta { color: var(--accent-gce); }
+    .building-card--ch .building-card__cta { color: var(--accent-ch); }
+
+    .admin-link {
+      font-size: 0.8125rem;
+      color: var(--muted);
+    }
+    .admin-link a {
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+    }
+    .admin-link a:hover { color: var(--ink); }
+
+    @media (max-width: 480px) {
+      .building-grid {
+        grid-template-columns: 1fr;
+        max-width: 320px;
+      }
+      .landing__logo { font-size: 2rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="landing">
+    <div class="landing__logo">Portelo</div>
+    <div class="landing__tagline">Vaš stambeni portal</div>
+
+    <div class="building-grid">
+      <a href="/login?building=gce" class="building-card building-card--gce">
+        <div class="building-card__logo">G</div>
+        <div class="building-card__name">Green Comfort Energy</div>
+        <div class="building-card__desc">Verifikacija Infostan računa i potrošnja</div>
+        <div class="building-card__cta">Odaberi →</div>
+      </a>
+
+      <a href="/login?building=ch" class="building-card building-card--ch">
+        <div class="building-card__logo">C</div>
+        <div class="building-card__name">C&H Solutions</div>
+        <div class="building-card__desc">Pregled računa i istorija plaćanja</div>
+        <div class="building-card__cta">Odaberi →</div>
+      </a>
+    </div>
+
+    <div class="admin-link">
+      <a href="/admin/login">Admin prijava</a>
+    </div>
+  </main>
+</body>
+</html>

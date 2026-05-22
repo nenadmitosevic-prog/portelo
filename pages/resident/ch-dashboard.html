@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Moj portal — C&H Solutions</title>
+  <link rel="stylesheet" href="/shared/ui/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root { --accent: var(--accent-ch); --soft: var(--soft-ch); }
+    body { padding-bottom: 48px; }
+    .main { padding-top: 24px; }
+    .section { margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <div class="header__inner">
+        <div class="header__logo" style="color:var(--accent-ch)">C&H Solutions</div>
+        <div class="header__nav">
+          <span class="header__apt" id="aptLabel"></span>
+          <button class="btn btn--outline btn--sm" onclick="logout()">Odjava</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main container">
+    <div id="loadingState" class="text-muted text-sm mt-4">Učitavanje...</div>
+    <div id="content" class="hidden">
+
+      <!-- KPI Row -->
+      <div class="kpi-row" id="kpiRow"></div>
+
+      <!-- Current Bill -->
+      <div class="section card" id="currentBillCard">
+        <div class="section-header">
+          <div class="section-title">Tekući račun</div>
+          <span id="currentBillBadge"></span>
+        </div>
+        <div id="currentBillContent"></div>
+      </div>
+
+      <!-- Payment History -->
+      <div class="section card">
+        <div class="section-header">
+          <div class="section-title">Istorija plaćanja</div>
+        </div>
+        <div class="table-wrap">
+          <table id="historyTable">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Iznos</th>
+                <th>Status</th>
+                <th>Datum plaćanja</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Electricity Panel -->
+      <div class="section card">
+        <div class="section-header">
+          <div class="section-title">Električna energija zgrade</div>
+        </div>
+        <canvas id="electricityChart" height="180"></canvas>
+        <div class="table-wrap mt-4">
+          <table id="electricityTable">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Potrošnja (kWh)</th>
+                <th>Iznos (RSD)</th>
+              </tr>
+            </thead>
+            <tbody id="electricityBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const FMT = new Intl.NumberFormat('sr-RS', { maximumFractionDigits: 0 });
+    const fmt = v => v != null ? FMT.format(v) + ' RSD' : '—';
+
+    const STATUS_MAP = {
+      paid: '<span class="badge badge--green">Plaćeno</span>',
+      pending: '<span class="badge badge--blue">Na čekanju</span>',
+      overdue: '<span class="badge badge--red">Kasni</span>',
+      partial: '<span class="badge badge--orange">Delimično</span>',
+    };
+
+    function formatPeriod(p) {
+      if (!p) return '—';
+      const [y, m] = p.split('-');
+      const months = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Avg','Sep','Okt','Nov','Dec'];
+      return `${months[parseInt(m)-1]} ${y}`;
+    }
+
+    async function load() {
+      try {
+        const res = await fetch('/api/resident/dashboard/ch', { credentials: 'include' });
+        if (res.status === 401) { location.href = '/login?building=ch'; return; }
+        const data = await res.json();
+        render(data);
+      } catch (e) {
+        document.getElementById('loadingState').textContent = 'Greška pri učitavanju. Osvežite stranicu.';
+      }
+    }
+
+    function render({ resident, kpis, bills, electricity }) {
+      document.getElementById('aptLabel').textContent = `Stan ${resident.apartment_ref}${resident.display_name ? ' · ' + resident.display_name : ''}`;
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('content').classList.remove('hidden');
+
+      // KPIs
+      const current = kpis.current;
+      document.getElementById('kpiRow').innerHTML = `
+        <div class="kpi-card">
+          <div class="kpi-card__label">Tekući račun</div>
+          <div class="kpi-card__value">${current ? fmt(current.total_amount) : '—'}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card__label">Dug</div>
+          <div class="kpi-card__value ${kpis.outstanding > 0 ? 'kpi-card__value--danger' : ''}">${fmt(kpis.outstanding)}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card__label">Poslednja uplata</div>
+          <div class="kpi-card__value" style="font-size:1rem">${kpis.lastPaid ? fmt(kpis.lastPaid.paid_amount) : '—'}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card__label">Status</div>
+          <div class="kpi-card__value" style="font-size:1rem;margin-top:4px">${current ? (STATUS_MAP[current.status] || '—') : '—'}</div>
+        </div>
+      `;
+
+      // Current bill detail
+      const billCard = document.getElementById('currentBillContent');
+      if (current) {
+        document.getElementById('currentBillBadge').innerHTML = STATUS_MAP[current.status] || '';
+        const lineItems = current.line_items || [];
+        billCard.innerHTML = `
+          <div class="text-sm text-muted mb-4">Period: ${formatPeriod(current.period)} · Rok: ${current.due_date || 'N/A'}</div>
+          ${lineItems.map(li => `
+            <div class="line-item">
+              <span>${li.label}</span>
+              <span class="font-bold">${fmt(li.amount)}</span>
+            </div>
+          `).join('')}
+          <div class="line-item font-bold" style="border-top:2px solid var(--line);margin-top:8px;padding-top:12px">
+            <span>Ukupno</span>
+            <span>${fmt(current.total_amount)}</span>
+          </div>
+          ${current.notes ? `<div class="alert alert--warn mt-4">${current.notes}</div>` : ''}
+        `;
+      } else {
+        billCard.innerHTML = '<p class="text-muted text-sm">Nema podataka za tekući period.</p>';
+      }
+
+      // History table
+      const tbody = document.getElementById('historyBody');
+      tbody.innerHTML = bills.map(b => `
+        <tr>
+          <td>${formatPeriod(b.period)}</td>
+          <td>${fmt(b.total_amount)}</td>
+          <td>${STATUS_MAP[b.status] || b.status}</td>
+          <td>${b.paid_at ? b.paid_at.slice(0,10) : '—'}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="4" class="text-muted text-sm">Nema podataka</td></tr>';
+
+      // Electricity
+      const elBody = document.getElementById('electricityBody');
+      elBody.innerHTML = electricity.map(e => `
+        <tr>
+          <td>${formatPeriod(e.period)}</td>
+          <td>${e.consumption_kwh != null ? FMT.format(e.consumption_kwh) + ' kWh' : '—'}</td>
+          <td>${e.total_amount != null ? fmt(e.total_amount) : '—'}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="3" class="text-muted text-sm">Nema podataka</td></tr>';
+
+      if (electricity.length > 0) {
+        const ctx = document.getElementById('electricityChart');
+        const labels = electricity.slice().reverse().map(e => formatPeriod(e.period));
+        const kwh = electricity.slice().reverse().map(e => e.consumption_kwh || 0);
+        new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Potrošnja (kWh)',
+              data: kwh,
+              backgroundColor: '#2c5f8a44',
+              borderColor: '#2c5f8a',
+              borderWidth: 2,
+              borderRadius: 6,
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, grid: { color: '#dbe5df' } },
+              x: { grid: { display: false } },
+            },
+          },
+        });
+      }
+    }
+
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      location.href = '/';
+    }
+
+    load();
+  </script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Moj portal — Green Comfort Energy</title>
+  <link rel="stylesheet" href="/shared/ui/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { padding-bottom: 48px; }
+    .main { padding-top: 24px; }
+    .section { margin-bottom: 24px; }
+    .disc-banner {
+      background: #fef0e4;
+      border: 1px solid #f0c27a;
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .disc-banner__icon { font-size: 1.25rem; }
+    .disc-banner__text { font-size: 0.9rem; color: #7d4a00; }
+    .disc-banner__amount { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <div class="header__inner">
+        <div class="header__logo">Green Comfort Energy</div>
+        <div class="header__nav">
+          <span class="header__apt" id="aptLabel"></span>
+          <button class="btn btn--outline btn--sm" onclick="logout()">Odjava</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main container">
+    <div id="loadingState" class="text-muted text-sm mt-4">Učitavanje...</div>
+    <div id="content" class="hidden">
+
+      <!-- Discrepancy banner (shown only if discrepancy exists) -->
+      <div id="discBanner" class="disc-banner hidden">
+        <div class="disc-banner__icon">⚠️</div>
+        <div class="disc-banner__text">
+          Uočena razlika u obračunu za tekući period:
+          <span class="disc-banner__amount" id="discAmount"></span>.
+          <a href="#billVerify" style="color:#d35400;border-bottom:1px solid">Pogledajte detalje</a>
+        </div>
+      </div>
+
+      <!-- KPI Row -->
+      <div class="kpi-row" id="kpiRow"></div>
+
+      <!-- Bill Verification -->
+      <div class="section card" id="billVerify">
+        <div class="section-header">
+          <div class="section-title">Verifikacija računa</div>
+          <span id="verifyBadge"></span>
+        </div>
+        <div id="verifyContent"></div>
+      </div>
+
+      <!-- Consumption History -->
+      <div class="section card">
+        <div class="section-header">
+          <div class="section-title">Istorija potrošnje</div>
+        </div>
+        <canvas id="consumptionChart" height="200"></canvas>
+      </div>
+
+      <!-- Electricity Panel -->
+      <div class="section card">
+        <div class="section-header">
+          <div class="section-title">Električna energija zgrade</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Potrošnja (kWh)</th>
+                <th>Iznos (RSD)</th>
+              </tr>
+            </thead>
+            <tbody id="electricityBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Flag modal -->
+  <div id="flagModal" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal__title">Prijavite grešku u obračunu</div>
+      <div class="form-group">
+        <label class="label">Opis greške</label>
+        <textarea class="input" id="flagNote" rows="4" placeholder="Opišite razliku koju ste uočili..."></textarea>
+      </div>
+      <div class="flex gap-4">
+        <button class="btn btn--outline btn--full" onclick="closeFlagModal()">Otkaži</button>
+        <button class="btn btn--primary btn--full" onclick="submitFlag()">Pošalji</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const FMT = new Intl.NumberFormat('sr-RS', { maximumFractionDigits: 0 });
+    const fmt = v => v != null ? FMT.format(v) + ' RSD' : '—';
+    let currentRefId = null;
+
+    const STATUS_MAP = {
+      pending_verification: '<span class="badge badge--blue">Na verifikaciji</span>',
+      verified_correct: '<span class="badge badge--green">Verifikovano</span>',
+      discrepancy_flagged: '<span class="badge badge--red">Razlika prijavljena</span>',
+    };
+
+    function formatPeriod(p) {
+      if (!p) return '—';
+      const [y, m] = p.split('-');
+      const months = ['Januar','Februar','Mart','April','Maj','Jun','Jul','Avgust','Septembar','Oktobar','Novembar','Decembar'];
+      return `${months[parseInt(m)-1]} ${y}`;
+    }
+
+    async function load() {
+      try {
+        const res = await fetch('/api/resident/dashboard/gce', { credentials: 'include' });
+        if (res.status === 401) { location.href = '/login?building=gce'; return; }
+        const data = await res.json();
+        render(data);
+      } catch {
+        document.getElementById('loadingState').textContent = 'Greška pri učitavanju.';
+      }
+    }
+
+    function render({ resident, kpis, history, electricity }) {
+      document.getElementById('aptLabel').textContent = `Stan ${resident.apartment_ref}${resident.display_name ? ' · ' + resident.display_name : ''}`;
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('content').classList.remove('hidden');
+
+      const current = kpis.current;
+
+      // Discrepancy banner
+      if (current?.discrepancy_amount && Math.abs(current.discrepancy_amount) >= 1) {
+        document.getElementById('discBanner').classList.remove('hidden');
+        document.getElementById('discAmount').textContent = fmt(Math.abs(current.discrepancy_amount));
+        currentRefId = current.id;
+      }
+
+      // KPIs
+      document.getElementById('kpiRow').innerHTML = `
+        <div class="kpi-card">
+          <div class="kpi-card__label">Infostan zaduženje</div>
+          <div class="kpi-card__value">${current ? fmt(current.infostan_amount) : '—'}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card__label">Portelo obračun</div>
+          <div class="kpi-card__value kpi-card__value--accent">${current ? fmt(current.expected_amount) : '—'}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card__label">Razlika</div>
+          <div class="kpi-card__value ${current?.discrepancy_amount > 1 ? 'kpi-card__value--danger' : current?.discrepancy_amount < -1 ? 'kpi-card__value--accent' : ''}">
+            ${current?.discrepancy_amount != null ? fmt(current.discrepancy_amount) : '—'}
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card__label">Status</div>
+          <div style="margin-top:4px">${current ? (STATUS_MAP[current.status] || '—') : '—'}</div>
+        </div>
+      `;
+
+      // Bill verification
+      const verifyEl = document.getElementById('verifyContent');
+      document.getElementById('verifyBadge').innerHTML = current ? (STATUS_MAP[current.status] || '') : '';
+
+      if (current) {
+        currentRefId = current.id;
+        const portelo = current.line_items || [];
+        const infostan = current.infostan_line_items || [];
+
+        verifyEl.innerHTML = `
+          <p class="text-sm text-muted mb-4">Period: ${formatPeriod(current.period)}</p>
+          <div class="line-compare">
+            <div>
+              <div class="line-compare__col-header">Portelo obračun</div>
+              ${portelo.map(li => `<div class="line-item"><span>${li.label}</span><span>${fmt(li.amount)}</span></div>`).join('')}
+              <div class="line-item font-bold" style="border-top:2px solid var(--line);margin-top:8px;padding-top:10px">
+                <span>Ukupno</span><span>${fmt(current.expected_amount)}</span>
+              </div>
+            </div>
+            <div>
+              <div class="line-compare__col-header">Infostan zaduženje</div>
+              ${infostan.length ? infostan.map(li => `<div class="line-item"><span>${li.label}</span><span>${fmt(li.amount)}</span></div>`).join('') : '<div class="text-muted text-sm">Stavke nisu dostupne</div>'}
+              <div class="line-item font-bold" style="border-top:2px solid var(--line);margin-top:8px;padding-top:10px">
+                <span>Ukupno</span><span>${fmt(current.infostan_amount)}</span>
+              </div>
+            </div>
+          </div>
+          ${current.status !== 'discrepancy_flagged' && current.discrepancy_amount && Math.abs(current.discrepancy_amount) >= 1 ? `
+            <div class="mt-6">
+              <button class="btn btn--outline btn--sm" onclick="openFlagModal()" style="color:var(--warn);border-color:var(--warn)">
+                ⚠ Prijavite grešku
+              </button>
+            </div>
+          ` : ''}
+          ${current.resident_notes ? `<div class="alert alert--warn mt-4">Vaša napomena: ${current.resident_notes}</div>` : ''}
+        `;
+      } else {
+        verifyEl.innerHTML = '<p class="text-muted text-sm">Nema podataka za tekući period.</p>';
+      }
+
+      // Consumption chart
+      const periods = history.slice().reverse().map(r => formatPeriod(r.period));
+      const expected = history.slice().reverse().map(r => r.expected_amount || 0);
+      const infostan = history.slice().reverse().map(r => r.infostan_amount || 0);
+
+      if (history.length > 0) {
+        new Chart(document.getElementById('consumptionChart'), {
+          type: 'bar',
+          data: {
+            labels: periods,
+            datasets: [
+              {
+                label: 'Portelo obračun',
+                data: expected,
+                backgroundColor: '#1e7f5444',
+                borderColor: '#1e7f54',
+                borderWidth: 2,
+                borderRadius: 6,
+              },
+              {
+                label: 'Infostan',
+                data: infostan,
+                backgroundColor: '#e6700044',
+                borderColor: '#e67000',
+                borderWidth: 2,
+                borderRadius: 6,
+              },
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+              y: { beginAtZero: true, grid: { color: '#dbe5df' } },
+              x: { grid: { display: false } },
+            },
+          },
+        });
+      }
+
+      // Electricity
+      document.getElementById('electricityBody').innerHTML = electricity.map(e => `
+        <tr>
+          <td>${formatPeriod(e.period)}</td>
+          <td>${e.consumption_kwh != null ? FMT.format(e.consumption_kwh) + ' kWh' : '—'}</td>
+          <td>${e.total_amount != null ? fmt(e.total_amount) : '—'}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="3" class="text-muted text-sm">Nema podataka</td></tr>';
+    }
+
+    function openFlagModal() {
+      document.getElementById('flagModal').classList.remove('hidden');
+    }
+
+    function closeFlagModal() {
+      document.getElementById('flagModal').classList.add('hidden');
+      document.getElementById('flagNote').value = '';
+    }
+
+    async function submitFlag() {
+      const note = document.getElementById('flagNote').value.trim();
+      if (!note) return alert('Unesite opis greške.');
+      try {
+        await fetch(`/api/resident/infostan/${currentRefId}/flag`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ note }),
+        });
+        closeFlagModal();
+        load();
+      } catch {
+        alert('Greška. Pokušajte ponovo.');
+      }
+    }
+
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      location.href = '/';
+    }
+
+    load();
+  </script>
+</body>
+</html>

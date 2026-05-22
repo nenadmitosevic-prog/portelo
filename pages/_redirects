@@ -1,0 +1,6 @@
+/resident/ch/dashboard  /resident/ch-dashboard.html  200
+/resident/gce/dashboard /resident/gce-dashboard.html 200
+/admin/dashboard        /admin/dashboard.html         200
+/admin/login            /admin/login.html             200
+/login                  /login.html                   200
+/api/*                  /api/:splat                   200

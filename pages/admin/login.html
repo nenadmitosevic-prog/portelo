@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Login — Portelo</title>
+  <link rel="stylesheet" href="/shared/ui/styles.css">
+  <style>
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .login-card { width: 100%; max-width: 380px; }
+    .login-header { text-align: center; margin-bottom: 32px; }
+    .login-header__title { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; }
+    .login-header__sub { color: var(--muted); font-size: 0.875rem; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card">
+      <div class="login-header">
+        <div style="font-size:1.75rem;font-weight:900;letter-spacing:-0.04em;margin-bottom:8px">Portelo</div>
+        <div class="login-header__title">Admin</div>
+        <div class="login-header__sub">Superadmin &amp; building admin access</div>
+      </div>
+
+      <div class="card">
+        <div id="errorAlert" class="alert alert--error hidden"></div>
+
+        <form id="loginForm">
+          <div class="form-group">
+            <label class="label" for="email">Email</label>
+            <input class="input" type="email" id="email" required autocomplete="email">
+          </div>
+          <div class="form-group">
+            <label class="label" for="password">Password</label>
+            <input class="input" type="password" id="password" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn--primary btn--full" id="submitBtn">Sign in</button>
+        </form>
+      </div>
+
+      <p class="text-center text-sm text-muted mt-4">
+        <a href="/" style="color:var(--muted)">← Back to portal</a>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const errEl = document.getElementById('errorAlert');
+      errEl.classList.add('hidden');
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+
+      try {
+        const res = await fetch('/api/auth/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          location.href = data.redirect || '/admin/dashboard';
+        } else {
+          errEl.textContent = data.error || 'Login failed.';
+          errEl.classList.remove('hidden');
+          btn.disabled = false;
+          btn.textContent = 'Sign in';
+        }
+      } catch {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      }
+    });
+  </script>
+</body>
+</html>

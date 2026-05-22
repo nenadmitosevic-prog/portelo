@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Dashboard — Portelo</title>
+  <link rel="stylesheet" href="/shared/ui/styles.css">
+  <style>
+    body { padding-bottom: 60px; }
+    .main { padding-top: 24px; }
+    .section { margin-bottom: 24px; }
+    .upload-row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .upload-box {
+      flex: 1; min-width: 260px;
+      border: 1.5px dashed var(--line);
+      border-radius: 10px;
+      padding: 20px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .upload-box:hover { border-color: var(--accent); }
+    .upload-box__title { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+    .upload-box__sub { font-size: 0.8rem; color: var(--muted); }
+    .filter-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .pill-select { padding: 7px 14px; border: 1.5px solid var(--line); border-radius: 20px; font-size: 0.875rem; background: var(--card); cursor: pointer; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+    .modal { background: var(--card); border-radius: 14px; padding: 28px; max-width: 560px; width: 100%; max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 40px rgba(0,0,0,0.18); }
+    .modal__title { font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; }
+    .preview-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 12px; }
+    .preview-table th, .preview-table td { padding: 6px 10px; border: 1px solid var(--line); }
+    .preview-table th { background: var(--bg); }
+    .import-step { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .import-step__num { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <div class="header__inner">
+        <div class="header__logo">Portelo Admin</div>
+        <div class="header__nav">
+          <span class="text-sm text-muted" id="adminEmail"></span>
+          <button class="btn btn--outline btn--sm" onclick="logout()">Sign out</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main container">
+    <div id="loadingState" class="text-muted text-sm">Loading...</div>
+    <div id="content" class="hidden">
+
+      <!-- Tabs -->
+      <div class="tabs" id="tabBar"></div>
+
+      <!-- Period filter -->
+      <div class="filter-row">
+        <select class="pill-select" id="periodSelect" onchange="loadActiveTab()"></select>
+        <button class="btn btn--outline btn--sm" onclick="loadActiveTab()">Refresh</button>
+      </div>
+
+      <!-- CH Tab -->
+      <div id="tab-ch" class="hidden">
+        <div class="kpi-row" id="ch-kpis"></div>
+
+        <!-- Excel Import -->
+        <div class="section card">
+          <div class="section-header">
+            <div class="section-title">Import billing data</div>
+            <button class="btn btn--primary btn--sm" onclick="openImport('ch')">↑ Import Excel</button>
+          </div>
+          <p class="text-sm text-muted">Upload monthly billing Excel (NalogZaNaplatu format or simple format).</p>
+        </div>
+
+        <!-- PDF Upload -->
+        <div class="section card">
+          <div class="section-header">
+            <div class="section-title">Electricity bill PDF</div>
+          </div>
+          <div class="upload-row">
+            <div class="upload-box" onclick="document.getElementById('elecUploadCh').click()">
+              <div class="upload-box__title">Upload EPS bill PDF</div>
+              <div class="upload-box__sub">Claude Haiku extracts period, kWh, and amount automatically</div>
+              <input type="file" id="elecUploadCh" accept=".pdf" class="hidden" onchange="uploadElectricity('ch', this)">
+            </div>
+          </div>
+          <div id="elecResultCh" class="mt-4"></div>
+        </div>
+
+        <!-- Bills table -->
+        <div class="section card">
+          <div class="section-header">
+            <div class="section-title">Bills</div>
+            <select class="pill-select" id="chStatusFilter" onchange="loadChBills()">
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="overdue">Overdue</option>
+              <option value="partial">Partial</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Apartment</th>
+                  <th>Resident</th>
+                  <th>Total (RSD)</th>
+                  <th>Status</th>
+                  <th>Paid at</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="chBillsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- GCE Tab -->
+      <div id="tab-gce" class="hidden">
+        <div class="kpi-row" id="gce-kpis"></div>
+
+        <!-- Import -->
+        <div class="section card">
+          <div class="section-header">
+            <div class="section-title">Import data</div>
+            <div class="flex gap-2">
+              <button class="btn btn--outline btn--sm" onclick="openImport('gce-residents')">↑ Import residents</button>
+              <button class="btn btn--primary btn--sm" onclick="openImport('gce')">↑ Import billing</button>
+            </div>
+          </div>
+          <p class="text-sm text-muted">Upload resident list (one-time) or monthly billing/Infostan Excel.</p>
+        </div>
+
+        <!-- PDF -->
+        <div class="section card">
+          <div class="section-header">
+            <div class="section-title">Electricity bill PDF</div>
+          </div>
+          <div class="upload-row">
+            <div class="upload-box" onclick="document.getElementById('elecUploadGce').click()">
+              <div class="upload-box__title">Upload EPS bill PDF</div>
+              <div class="upload-box__sub">Claude Haiku extracts period, kWh, and amount automatically</div>
+              <input type="file" id="elecUploadGce" accept=".pdf" class="hidden" onchange="uploadElectricity('gce', this)">
+            </div>
+          </div>
+          <div id="elecResultGce" class="mt-4"></div>
+        </div>
+
+        <!-- Infostan table -->
+        <div class="section card">
+          <div class="section-header">
+            <div class="section-title">Infostan references</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Apartment</th>
+                  <th>Resident</th>
+                  <th>Infostan (RSD)</th>
+                  <th>Expected (RSD)</th>
+                  <th>Δ (RSD)</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="gceInfostanBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Import modal -->
+  <div id="importModal" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal__title" id="importModalTitle">Import Excel</div>
+
+      <div id="importStep1">
+        <div class="import-step">
+          <div class="import-step__num">1</div>
+          <div>Select Excel file (.xlsx)</div>
+        </div>
+        <input type="file" id="importFile" accept=".xlsx,.xls" class="input" style="padding:8px">
+
+        <div class="import-step mt-4">
+          <div class="import-step__num">2</div>
+          <div>Select period</div>
+        </div>
+        <select class="select" id="importPeriod"></select>
+
+        <div class="flex gap-4 mt-6">
+          <button class="btn btn--outline btn--full" onclick="closeImport()">Cancel</button>
+          <button class="btn btn--primary btn--full" onclick="previewImport()">Preview →</button>
+        </div>
+      </div>
+
+      <div id="importStep2" class="hidden">
+        <div class="alert alert--warn" id="importPreviewInfo"></div>
+        <div class="table-wrap" style="max-height:300px;overflow-y:auto">
+          <table class="preview-table" id="importPreviewTable"></table>
+        </div>
+        <div class="flex gap-4 mt-6">
+          <button class="btn btn--outline btn--full" onclick="backToStep1()">← Back</button>
+          <button class="btn btn--primary btn--full" onclick="confirmImport()">✓ Import</button>
+        </div>
+      </div>
+
+      <div id="importResult" class="hidden">
+        <div id="importResultMsg"></div>
+        <button class="btn btn--primary btn--full mt-4" onclick="closeImport()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mark paid modal -->
+  <div id="paidModal" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal__title">Mark as paid</div>
+      <div class="form-group">
+        <label class="label">Amount paid (RSD)</label>
+        <input class="input" type="number" id="paidAmount">
+      </div>
+      <div class="form-group">
+        <label class="label">Date paid</label>
+        <input class="input" type="date" id="paidDate">
+      </div>
+      <div class="flex gap-4">
+        <button class="btn btn--outline btn--full" onclick="closePaidModal()">Cancel</button>
+        <button class="btn btn--primary btn--full" onclick="submitPaid()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const FMT = new Intl.NumberFormat('sr-RS', { maximumFractionDigits: 0 });
+    const fmt = v => v != null ? FMT.format(v) : '—';
+
+    const STATUS_MAP = {
+      paid: '<span class="badge badge--green">Paid</span>',
+      pending: '<span class="badge badge--blue">Pending</span>',
+      overdue: '<span class="badge badge--red">Overdue</span>',
+      partial: '<span class="badge badge--orange">Partial</span>',
+      pending_verification: '<span class="badge badge--blue">Pending</span>',
+      verified_correct: '<span class="badge badge--green">Verified</span>',
+      discrepancy_flagged: '<span class="badge badge--red">Discrepancy</span>',
+    };
+
+    let adminRole = 'superadmin';
+    let adminBuildingId = null;
+    let activeTab = 'ch';
+    let importTarget = null;
+    let importPreviewData = null;
+    let currentBillId = null;
+
+    // Populate period selector
+    function populatePeriods() {
+      const sel = document.getElementById('periodSelect');
+      const importSel = document.getElementById('importPeriod');
+      const now = new Date();
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        const label = d.toLocaleDateString('sr-RS', { year: 'numeric', month: 'long' });
+        [sel, importSel].forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = val; opt.textContent = label;
+          s.appendChild(opt);
+        });
+      }
+    }
+
+    function getPeriod() { return document.getElementById('periodSelect').value; }
+
+    async function init() {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (res.status === 401) { location.href = '/admin/login'; return; }
+        const me = await res.json();
+        if (me.type !== 'admin') { location.href = '/'; return; }
+
+        adminRole = me.role;
+        adminBuildingId = me.building_id;
+        document.getElementById('adminEmail').textContent = me.email;
+
+        populatePeriods();
+        buildTabs();
+
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('content').classList.remove('hidden');
+
+        loadActiveTab();
+      } catch {
+        document.getElementById('loadingState').textContent = 'Failed to load. Please refresh.';
+      }
+    }
+
+    function buildTabs() {
+      const bar = document.getElementById('tabBar');
+      const tabs = adminRole === 'superadmin'
+        ? [{ id: 'ch', label: 'C&H Solutions' }, { id: 'gce', label: 'Green Comfort Energy' }]
+        : [{ id: adminBuildingId, label: adminBuildingId === 'ch' ? 'C&H Solutions' : 'Green Comfort Energy' }];
+
+      activeTab = tabs[0].id;
+      bar.innerHTML = tabs.map(t => `
+        <button class="tab ${t.id === activeTab ? 'active' : ''}" onclick="switchTab('${t.id}')">${t.label}</button>
+      `).join('');
+    }
+
+    function switchTab(id) {
+      activeTab = id;
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.textContent.trim() === (id === 'ch' ? 'C&H Solutions' : 'Green Comfort Energy')));
+      document.getElementById('tab-ch').classList.toggle('hidden', id !== 'ch');
+      document.getElementById('tab-gce').classList.toggle('hidden', id !== 'gce');
+      loadActiveTab();
+    }
+
+    function showTab(id) {
+      document.getElementById('tab-ch').classList.toggle('hidden', id !== 'ch');
+      document.getElementById('tab-gce').classList.toggle('hidden', id !== 'gce');
+    }
+
+    function loadActiveTab() {
+      showTab(activeTab);
+      if (activeTab === 'ch') { loadChSummary(); loadChBills(); }
+      if (activeTab === 'gce') { loadGceSummary(); loadGceInfostan(); }
+    }
+
+    async function loadChSummary() {
+      const res = await fetch(`/api/admin/buildings/ch/summary?period=${getPeriod()}`, { credentials: 'include' });
+      const d = await res.json();
+      document.getElementById('ch-kpis').innerHTML = `
+        <div class="kpi-card"><div class="kpi-card__label">Billed</div><div class="kpi-card__value">${fmt(d.total_billed)} RSD</div></div>
+        <div class="kpi-card"><div class="kpi-card__label">Collected</div><div class="kpi-card__value kpi-card__value--accent">${fmt(d.total_collected)} RSD</div></div>
+        <div class="kpi-card"><div class="kpi-card__label">Outstanding</div><div class="kpi-card__value ${d.outstanding > 0 ? 'kpi-card__value--danger' : ''}">${fmt(d.outstanding)} RSD</div></div>
+        <div class="kpi-card"><div class="kpi-card__label">Residents</div><div class="kpi-card__value">${d.resident_count}</div></div>
+      `;
+    }
+
+    async function loadChBills() {
+      const status = document.getElementById('chStatusFilter').value;
+      const url = `/api/admin/buildings/ch/bills?period=${getPeriod()}${status ? '&status='+status : ''}`;
+      const res = await fetch(url, { credentials: 'include' });
+      const bills = await res.json();
+      document.getElementById('chBillsBody').innerHTML = bills.map(b => `
+        <tr>
+          <td><strong>${b.apartment_ref}</strong></td>
+          <td>${b.display_name || '—'}</td>
+          <td>${fmt(b.total_amount)}</td>
+          <td>${STATUS_MAP[b.status] || b.status}</td>
+          <td>${b.paid_at ? b.paid_at.slice(0,10) : '—'}</td>
+          <td>
+            ${b.status !== 'paid' ? `<button class="btn btn--sm btn--outline" onclick="openPaidModal('${b.id}', ${b.total_amount})">Mark paid</button>` : ''}
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="6" class="text-muted text-sm">No bills for this period</td></tr>';
+    }
+
+    async function loadGceSummary() {
+      const res = await fetch(`/api/admin/buildings/gce/summary?period=${getPeriod()}`, { credentials: 'include' });
+      const d = await res.json();
+      document.getElementById('gce-kpis').innerHTML = `
+        <div class="kpi-card"><div class="kpi-card__label">Verified</div><div class="kpi-card__value kpi-card__value--accent">${d.verified_count}</div></div>
+        <div class="kpi-card"><div class="kpi-card__label">Discrepancies</div><div class="kpi-card__value ${d.discrepancy_count > 0 ? 'kpi-card__value--danger' : ''}">${d.discrepancy_count}</div></div>
+        <div class="kpi-card"><div class="kpi-card__label">Avg discrepancy</div><div class="kpi-card__value">${fmt(d.avg_discrepancy)} RSD</div></div>
+        <div class="kpi-card"><div class="kpi-card__label">Apartments</div><div class="kpi-card__value">${d.total_apartments}</div></div>
+      `;
+    }
+
+    async function loadGceInfostan() {
+      const res = await fetch(`/api/admin/buildings/gce/infostan?period=${getPeriod()}`, { credentials: 'include' });
+      const rows = await res.json();
+      document.getElementById('gceInfostanBody').innerHTML = rows.map(r => {
+        const disc = r.discrepancy_amount;
+        const discFmt = disc != null ? `<span style="color:${Math.abs(disc)<1?'var(--success)':disc>0?'var(--danger)':'var(--accent)'}">${disc > 0 ? '+' : ''}${fmt(disc)}</span>` : '—';
+        return `<tr>
+          <td><strong>${r.apartment_ref}</strong></td>
+          <td>${r.display_name || '—'}</td>
+          <td>${fmt(r.infostan_amount)}</td>
+          <td>${fmt(r.expected_amount)}</td>
+          <td>${discFmt}</td>
+          <td>${STATUS_MAP[r.status] || r.status}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" class="text-muted text-sm">No data for this period</td></tr>';
+    }
+
+    // --- Import modal ---
+    function openImport(target) {
+      importTarget = target;
+      const titles = { ch: 'Import C&H Billing Excel', gce: 'Import GCE Billing Excel', 'gce-residents': 'Import GCE Residents' };
+      document.getElementById('importModalTitle').textContent = titles[target] || 'Import Excel';
+      document.getElementById('importStep1').classList.remove('hidden');
+      document.getElementById('importStep2').classList.add('hidden');
+      document.getElementById('importResult').classList.add('hidden');
+      document.getElementById('importFile').value = '';
+      document.getElementById('importModal').classList.remove('hidden');
+    }
+
+    function closeImport() {
+      document.getElementById('importModal').classList.add('hidden');
+      loadActiveTab();
+    }
+
+    function backToStep1() {
+      document.getElementById('importStep1').classList.remove('hidden');
+      document.getElementById('importStep2').classList.add('hidden');
+    }
+
+    async function previewImport() {
+      const file = document.getElementById('importFile').files[0];
+      if (!file) return alert('Select a file first.');
+      const period = document.getElementById('importPeriod').value;
+
+      if (importTarget === 'gce-residents') {
+        // No preview for residents, straight to confirm
+        document.getElementById('importStep1').classList.add('hidden');
+        document.getElementById('importStep2').classList.remove('hidden');
+        document.getElementById('importPreviewInfo').textContent = 'Ready to import residents. This will add new residents (existing apartments will be skipped).';
+        document.getElementById('importPreviewTable').innerHTML = '';
+        importPreviewData = { file, type: 'residents' };
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('period', period);
+      fd.append('preview', '1');
+
+      try {
+        const endpoint = importTarget === 'ch' ? '/api/admin/buildings/ch/excel/import' : '/api/admin/buildings/gce/excel/import';
+        const res = await fetch(endpoint, { method: 'POST', credentials: 'include', body: fd });
+        const data = await res.json();
+
+        if (!res.ok) return alert(data.error || 'Preview failed.');
+
+        importPreviewData = { file, period, type: importTarget };
+        document.getElementById('importPreviewInfo').textContent = `${data.total} rows detected. Showing first 10 rows below.`;
+
+        const rows = data.preview;
+        if (rows.length) {
+          const keys = Object.keys(rows[0]);
+          const thead = `<tr>${keys.map(k => `<th>${k}</th>`).join('')}</tr>`;
+          const tbody = rows.map(r => `<tr>${keys.map(k => `<td>${r[k] ?? '—'}</td>`).join('')}</tr>`).join('');
+          document.getElementById('importPreviewTable').innerHTML = `<thead>${thead}</thead><tbody>${tbody}</tbody>`;
+        }
+
+        document.getElementById('importStep1').classList.add('hidden');
+        document.getElementById('importStep2').classList.remove('hidden');
+      } catch {
+        alert('Failed to preview. Check file format.');
+      }
+    }
+
+    async function confirmImport() {
+      const { file, period, type } = importPreviewData;
+      const fd = new FormData();
+      fd.append('file', file);
+      if (period) fd.append('period', period);
+
+      let endpoint;
+      if (type === 'ch') endpoint = '/api/admin/buildings/ch/excel/import';
+      else if (type === 'gce') endpoint = '/api/admin/buildings/gce/excel/import';
+      else endpoint = '/api/admin/buildings/gce/excel/import-residents';
+
+      try {
+        const res = await fetch(endpoint, { method: 'POST', credentials: 'include', body: fd });
+        const data = await res.json();
+
+        document.getElementById('importStep2').classList.add('hidden');
+        document.getElementById('importResult').classList.remove('hidden');
+
+        if (type === 'gce-residents') {
+          document.getElementById('importResultMsg').innerHTML = `
+            <div class="alert alert--success">Imported ${data.created} residents. Skipped: ${data.skipped?.length || 0}.</div>
+          `;
+        } else {
+          document.getElementById('importResultMsg').innerHTML = `
+            <div class="alert alert--success">Imported ${data.imported} records. Skipped: ${data.skipped}.</div>
+            ${data.skipped > 0 ? `<div class="alert alert--warn mt-4">Skipped rows: ${data.skipped_rows.map(s=>s.reason).join(', ')}</div>` : ''}
+          `;
+        }
+      } catch {
+        alert('Import failed. Please try again.');
+      }
+    }
+
+    // --- Electricity PDF upload ---
+    async function uploadElectricity(building, input) {
+      const file = input.files[0];
+      if (!file) return;
+      const resultEl = document.getElementById(`elecResult${building === 'ch' ? 'Ch' : 'Gce'}`);
+      resultEl.innerHTML = '<div class="text-muted text-sm">Extracting with Claude Haiku...</div>';
+
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const res = await fetch(`/api/admin/buildings/${building}/electricity/upload`, {
+          method: 'POST', credentials: 'include', body: fd,
+        });
+        const data = await res.json();
+        if (data.extraction_ok) {
+          resultEl.innerHTML = `<div class="alert alert--success">Extracted: Period ${data.period}, ${data.data?.consumption_kwh} kWh, ${fmt(data.data?.total_amount_rsd)} RSD</div>`;
+        } else {
+          resultEl.innerHTML = `<div class="alert alert--warn">Extraction incomplete — record saved, please verify manually. Period: ${data.period}</div>`;
+        }
+      } catch {
+        resultEl.innerHTML = `<div class="alert alert--error">Upload failed. Try again.</div>`;
+      }
+      input.value = '';
+    }
+
+    // --- Mark paid modal ---
+    function openPaidModal(billId, totalAmount) {
+      currentBillId = billId;
+      document.getElementById('paidAmount').value = totalAmount;
+      document.getElementById('paidDate').value = new Date().toISOString().slice(0,10);
+      document.getElementById('paidModal').classList.remove('hidden');
+    }
+
+    function closePaidModal() {
+      document.getElementById('paidModal').classList.add('hidden');
+      currentBillId = null;
+    }
+
+    async function submitPaid() {
+      const amount = parseFloat(document.getElementById('paidAmount').value);
+      const date = document.getElementById('paidDate').value;
+      await fetch(`/api/admin/buildings/ch/bills/${currentBillId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: 'paid', paid_amount: amount, paid_at: date }),
+      });
+      closePaidModal();
+      loadChBills();
+    }
+
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      location.href = '/admin/login';
+    }
+
+    init();
+  </script>
+</body>
+</html>

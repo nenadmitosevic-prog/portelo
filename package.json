@@ -1,0 +1,20 @@
+{
+  "name": "portelo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev src/worker.js",
+    "deploy": "wrangler deploy src/worker.js",
+    "db:migrate": "wrangler d1 execute portelo-db --file=migrations/001_schema.sql",
+    "db:seed": "wrangler d1 execute portelo-db --file=migrations/002_seed.sql",
+    "db:migrate:remote": "wrangler d1 execute portelo-db --file=migrations/001_schema.sql --remote",
+    "db:seed:remote": "wrangler d1 execute portelo-db --file=migrations/002_seed.sql --remote"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

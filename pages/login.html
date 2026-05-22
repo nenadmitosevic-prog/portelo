@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prijava — Portelo</title>
+  <link rel="stylesheet" href="/shared/ui/styles.css">
+  <style>
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .login-header__building-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--soft);
+      border-radius: 50px;
+      padding: 8px 16px;
+      margin-bottom: 20px;
+    }
+
+    .login-header__building-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 1rem;
+    }
+
+    .login-header__building-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .login-header__title {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .login-header__subtitle {
+      color: var(--muted);
+      margin-top: 6px;
+      font-size: 0.9rem;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-bottom: 24px;
+    }
+    .back-link:hover { color: var(--ink); }
+
+    .ch-theme { --accent: var(--accent-ch); --soft: var(--soft-ch); }
+  </style>
+</head>
+<body>
+  <div class="login-page" id="loginPage">
+    <div class="login-card">
+      <a href="/" class="back-link">← Nazad na izbor zgrade</a>
+
+      <div class="login-header">
+        <div class="login-header__building-badge" id="buildingBadge"></div>
+        <div class="login-header__title">Prijava stanara</div>
+        <div class="login-header__subtitle">Unesite broj stana i PIN</div>
+      </div>
+
+      <div class="card">
+        <div id="errorAlert" class="alert alert--error hidden"></div>
+
+        <form id="loginForm">
+          <div class="form-group">
+            <label class="label" for="apartmentRef">Broj stana</label>
+            <input class="input" type="text" id="apartmentRef" name="apartment_ref"
+              placeholder="npr. 45 ili 1A" autocomplete="off" autocapitalize="off" required>
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="pin">PIN</label>
+            <input class="input input--pin" type="password" id="pin" name="pin"
+              placeholder="••••" inputmode="numeric" maxlength="6" required>
+          </div>
+
+          <button type="submit" class="btn btn--primary btn--full" id="submitBtn">
+            Prijavi se
+          </button>
+        </form>
+      </div>
+
+      <p class="text-muted text-sm mt-4" style="text-align:center;">
+        Zaboravili ste PIN? Obratite se upravi zgrade.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const building = params.get('building') || 'gce';
+
+    const buildings = {
+      gce: { name: 'Green Comfort Energy', icon: 'G', color: '#1e7f54', bg: '#e4f1ea' },
+      ch: { name: 'C&H Solutions', icon: 'C', color: '#2c5f8a', bg: '#e4ecf4' },
+    };
+
+    const b = buildings[building] || buildings.gce;
+
+    document.documentElement.style.setProperty('--accent', b.color);
+    document.documentElement.style.setProperty('--soft', b.bg);
+
+    const badge = document.getElementById('buildingBadge');
+    badge.innerHTML = `
+      <div class="login-header__building-icon" style="background:${b.bg};color:${b.color}">${b.icon}</div>
+      <span class="login-header__building-name">${b.name}</span>
+    `;
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const errEl = document.getElementById('errorAlert');
+      errEl.classList.add('hidden');
+      btn.disabled = true;
+      btn.textContent = 'Prijava...';
+
+      const apartmentRef = document.getElementById('apartmentRef').value.trim();
+      const pin = document.getElementById('pin').value.trim();
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ building_id: building, apartment_ref: apartmentRef, pin }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.redirect) {
+          location.href = data.redirect;
+        } else {
+          errEl.textContent = data.error || 'Prijava nije uspela.';
+          errEl.classList.remove('hidden');
+          btn.disabled = false;
+          btn.textContent = 'Prijavi se';
+        }
+      } catch {
+        errEl.textContent = 'Greška u mreži. Pokušajte ponovo.';
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Prijavi se';
+      }
+    });
+  </script>
+</body>
+</html>
