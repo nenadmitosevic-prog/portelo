@@ -51,6 +51,61 @@ router.get('/api/resident/bills/:id', async (req, env, _ctx, params) => {
   return json({ ...bill, line_items: JSON.parse(bill.line_items || '[]') });
 });
 
+// --- GCE resident dashboard (bv / ku) ---
+router.get('/api/resident/dashboard/gce-resident', async (req, env) => {
+  const ctx = await requireResidentSession(req, env.DB);
+  if (!ctx) return error('Unauthorized', 401);
+  const { resident, building } = ctx;
+
+  // Resident's bills sorted newest first
+  const { results: bills } = await getResidentBills(env.DB, resident.id, 12);
+  const latest = bills[0];
+
+  let comparison = null;
+  if (latest) {
+    const latestItems = JSON.parse(latest.line_items || '{}');
+
+    // All other apartments' bills for the same building + period
+    const { results: peers } = await query(env.DB,
+      'SELECT total_amount, line_items FROM bills WHERE building_id = ? AND period = ? AND resident_id != ?',
+      [building.id, latest.period, resident.id]
+    );
+
+    const allGross = [latest.total_amount, ...peers.map(p => p.total_amount)].sort((a, b) => a - b);
+    const allKwh = [
+      latestItems.consumption_kwh || 0,
+      ...peers.map(p => { const li = JSON.parse(p.line_items || '{}'); return li.consumption_kwh || 0; }),
+    ].sort((a, b) => a - b);
+
+    const rankByGross = allGross.filter(v => v < latest.total_amount).length + 1;
+    const avgGross = Math.round(allGross.reduce((s, v) => s + v, 0) / allGross.length * 100) / 100;
+    const avgKwh  = Math.round(allKwh.reduce((s, v) => s + v, 0) / allKwh.length * 100) / 100;
+
+    comparison = {
+      rank: rankByGross,
+      total_apartments: allGross.length,
+      min_gross: allGross[0],
+      avg_gross: avgGross,
+      max_gross: allGross[allGross.length - 1],
+      min_kwh: allKwh[0],
+      avg_kwh: avgKwh,
+      max_kwh: allKwh[allKwh.length - 1],
+    };
+  }
+
+  return json({
+    resident: { id: resident.id, apartment_ref: resident.apartment_ref, display_name: resident.display_name, building_id: resident.building_id },
+    building: { id: building.id, name: building.name, accent_color: building.accent_color },
+    latest: latest ? { ...latest, line_items: JSON.parse(latest.line_items || '{}') } : null,
+    comparison,
+    history: bills.map(b => {
+      const li = JSON.parse(b.line_items || '{}');
+      return { period: b.period, total_amount: b.total_amount, status: b.status,
+               consumption_kwh: li.consumption_kwh || 0, service_type: li.service_type || null };
+    }),
+  });
+});
+
 router.get('/api/resident/dashboard/ch', async (req, env) => {
   const ctx = await requireResidentSession(req, env.DB);
   if (!ctx) return error('Unauthorized', 401);

@@ -14,8 +14,8 @@ const PAGE_MAP = {
   // All direct_billing buildings → shared dashboard page
   '/resident/zh/dashboard': '/resident/ch-dashboard.html',
   '/resident/kv/dashboard': '/resident/ch-dashboard.html',
-  '/resident/bv/dashboard': '/resident/ch-dashboard.html',
-  '/resident/ku/dashboard': '/resident/ch-dashboard.html',
+  '/resident/bv/dashboard': '/resident/gce-resident-dashboard.html',
+  '/resident/ku/dashboard': '/resident/gce-resident-dashboard.html',
   // Legacy / fallback
   '/resident/ch/dashboard': '/resident/ch-dashboard.html',
   '/resident/gce/dashboard': '/resident/gce-dashboard.html',
@@ -53,7 +53,8 @@ export default {
 
     // Resident bills (direct_billing buildings — zh/kv)
     if (url.pathname.startsWith('/api/resident/bills') ||
-        url.pathname.startsWith('/api/resident/dashboard/ch')) {
+        url.pathname.startsWith('/api/resident/dashboard/ch') ||
+        url.pathname.startsWith('/api/resident/dashboard/gce-resident')) {
       try {
         const res = await chRoutes.handle(request, env, ctx);
         if (res) return res;

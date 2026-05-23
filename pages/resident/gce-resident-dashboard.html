@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Moj portal — Green Comfort Energy</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root { --accent: #1e7f54; --soft: #e4f1ea; }
+    body { padding-bottom: 48px; background: var(--bg); }
+    .main { padding-top: 20px; }
+
+    /* Notice banner */
+    .notice {
+      background: #fff8e1;
+      border: 1px solid #f3db9a;
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-size: 0.85rem;
+      color: #7a5800;
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .notice b { font-weight: 700; }
+
+    /* Meta subtitle */
+    .bill-meta {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.6;
+    }
+
+    /* KPI row */
+    .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+    .kpi-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px 20px;
+    }
+    .kpi-card__label { font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
+    .kpi-card__value { font-size: 1.45rem; font-weight: 800; color: var(--ink); letter-spacing: -0.02em; }
+    .kpi-card__value--accent { color: var(--accent); }
+
+    /* Two-column layout */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+    /* Bill breakdown table */
+    .bill-table { width: 100%; border-collapse: collapse; }
+    .bill-table tr { border-bottom: 1px solid var(--line); }
+    .bill-table tr:last-child { border-bottom: none; }
+    .bill-table td { padding: 10px 0; font-size: 0.9rem; }
+    .bill-table td:last-child { text-align: right; font-weight: 600; }
+    .bill-table .sub-row td { font-size: 0.8rem; color: var(--muted); padding: 3px 0 3px 14px; }
+    .bill-table .sub-row td:last-child { font-weight: 400; }
+    .bill-table .divider td { border-top: 2px solid var(--line); padding-top: 12px; }
+    .bill-table .total-row td { font-size: 1.05rem; font-weight: 800; color: var(--accent); padding-top: 10px; }
+    .section-title { font-size: 1rem; font-weight: 700; margin-bottom: 16px; color: var(--ink); }
+
+    /* Comparison panel */
+    .comparison-card { display: flex; flex-direction: column; gap: 16px; }
+    .scale-wrap { position: relative; }
+    .scale-bar {
+      height: 10px;
+      border-radius: 99px;
+      background: linear-gradient(to right, #1e7f54, #9ecb45, #e8a900, #c0392b);
+      margin: 20px 0 28px;
+      position: relative;
+    }
+    .scale-dot {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--ink);
+      border: 3px solid white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+    .scale-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: -20px;
+    }
+    .scale-labels div { text-align: center; }
+    .scale-labels div b { display: block; color: var(--ink); font-size: 0.8rem; }
+    .rank-text { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+    .rank-text b { color: var(--ink); }
+
+    /* History chart */
+    .history-section { margin-bottom: 20px; }
+    .history-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 0;
+      height: 150px;
+      padding-bottom: 0;
+      overflow-x: auto;
+    }
+    .history-bar-wrap {
+      flex: 1;
+      min-width: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .history-bar {
+      width: 70%;
+      border-radius: 6px 6px 3px 3px;
+      min-height: 4px;
+      transition: opacity 0.15s;
+    }
+    .history-bar:hover { opacity: 0.8; }
+    .history-bar--heating  { background: linear-gradient(180deg, #6ebc7d, #1e7f54); }
+    .history-bar--cooling  { background: linear-gradient(180deg, #7ec8e3, #0077aa); }
+    .history-bar--current  { background: linear-gradient(180deg, #a8d5bb, #2e9d6a); opacity: 0.7; }
+    .history-month { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
+    .history-val   { font-size: 0.72rem; font-weight: 700; color: var(--ink); }
+
+    @media (max-width: 600px) {
+      .two-col { grid-template-columns: 1fr; }
+      .kpi-row { grid-template-columns: 1fr 1fr; }
+      .kpi-row .kpi-card:last-child { grid-column: span 2; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <div class="header__inner">
+        <div class="header__logo" style="color:var(--accent)" id="buildingLogo">Green Comfort Energy</div>
+        <div class="header__nav">
+          <span class="header__apt" id="aptLabel"></span>
+          <button class="btn btn--outline btn--sm" onclick="logout()">Odjava</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main container">
+    <div id="loadingState" class="text-muted text-sm mt-4">Učitavanje...</div>
+
+    <div id="content" class="hidden">
+
+      <!-- Notice -->
+      <div class="notice">
+        <b>Napomena:</b> Ovo nije zvaničan Infostan račun. Prikazani iznosi su procena zasnovana na uvezenim GCE Excel podacima za obračun grejanja/hlađenja. Zvanični račun izdaje Infostan.
+      </div>
+
+      <!-- Header card -->
+      <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:1.35rem;font-weight:800;letter-spacing:-0.02em" id="mainTitle">—</div>
+            <div class="bill-meta" id="billMeta">—</div>
+          </div>
+        </div>
+
+        <!-- KPI row -->
+        <div class="kpi-row" style="margin-top:18px">
+          <div class="kpi-card">
+            <div class="kpi-card__label">Procenjeni GCE iznos</div>
+            <div class="kpi-card__value kpi-card__value--accent" id="kpiGross">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card__label">Vaša potrošnja</div>
+            <div class="kpi-card__value" id="kpiKwh">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-card__label">PDV</div>
+            <div class="kpi-card__value" id="kpiVat">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bill detail + Comparison -->
+      <div class="two-col">
+        <!-- Bill breakdown -->
+        <div class="card">
+          <div class="section-title">Pregled računa za tekući mesec</div>
+          <table class="bill-table" id="billTable"></table>
+        </div>
+
+        <!-- Comparison -->
+        <div class="card">
+          <div class="section-title">Anonimizovano poređenje potrošnje</div>
+          <div class="comparison-card">
+            <div class="text-sm text-muted" style="line-height:1.5">
+              Vaša potrošnja je prikazana u odnosu na najnižu,
+              prosečnu i najvišu potrošnju stanova u istoj zgradi.
+            </div>
+            <div class="scale-wrap">
+              <div class="scale-bar" id="scaleBar">
+                <div class="scale-dot" id="scaleDot"></div>
+              </div>
+              <div class="scale-labels" id="scaleLabels"></div>
+            </div>
+            <div class="rank-text" id="rankText"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- History chart -->
+      <div class="card history-section">
+        <div class="section-title">Istorija potrošnje</div>
+        <div class="text-sm text-muted" style="margin-bottom:16px">
+          Mesečna potrošnja u kWh iz uvezenih Excel fajlova. Tekući mesec je obeležen svetlijom bojom.
+        </div>
+        <div class="history-bars" id="historyBars"></div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const FMT    = new Intl.NumberFormat('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const FMT0   = new Intl.NumberFormat('sr-RS', { maximumFractionDigits: 0 });
+    const money  = v => v != null ? FMT.format(v) + ' RSD' : '—';
+    const num    = v => v != null ? FMT0.format(v) : '—';
+
+    function formatPeriod(p) {
+      if (!p) return '—';
+      const [y, m] = p.split('-');
+      const months = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Avg','Sep','Okt','Nov','Dec'];
+      return months[parseInt(m) - 1] + ' ' + y;
+    }
+
+    function formatBillingMonth(period) {
+      if (!period) return '—';
+      const [y, m] = period.split('-');
+      return m + '/' + y;
+    }
+
+    async function load() {
+      try {
+        const res = await fetch('/api/resident/dashboard/gce-resident', { credentials: 'include' });
+        if (res.status === 401) { location.href = '/'; return; }
+        const data = await res.json();
+        render(data);
+      } catch {
+        document.getElementById('loadingState').textContent = 'Greška pri učitavanju. Osvežite stranicu.';
+      }
+    }
+
+    function render({ resident, building, latest, comparison, history }) {
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('content').classList.remove('hidden');
+
+      // Header
+      if (building) {
+        document.getElementById('buildingLogo').textContent = building.name;
+        document.title = 'Moj portal — ' + building.name;
+      }
+      document.getElementById('aptLabel').textContent =
+        'Stan ' + resident.apartment_ref + (resident.display_name ? ' · ' + resident.display_name : '');
+
+      if (!latest) {
+        document.getElementById('mainTitle').textContent = building.name + ' · Stan ' + resident.apartment_ref;
+        document.getElementById('billMeta').textContent = 'Nema podataka za prikazivanje.';
+        return;
+      }
+
+      const li = latest.line_items || {};
+      const billingMonth = formatBillingMonth(latest.period);
+      const svcLabel = li.service_type || '—';
+
+      document.getElementById('mainTitle').textContent =
+        building.name + ' · stan ' + resident.apartment_ref;
+      document.getElementById('billMeta').textContent =
+        'Obračunski mesec ' + billingMonth +
+        (li.period_from ? ' · period potrošnje ' + li.period_from + ' do ' + li.period_to : '') +
+        ' · usluga: ' + svcLabel.toLowerCase();
+
+      // KPIs
+      document.getElementById('kpiGross').textContent = money(latest.total_amount);
+      document.getElementById('kpiKwh').textContent   = num(li.consumption_kwh) + ' kWh';
+      document.getElementById('kpiVat').textContent   = money(li.vat_total) + ' (' + (li.vat_rate || '?') + '%)';
+
+      // Bill table
+      const ov = li.own_variable_net, of_ = li.own_fixed_net;
+      const sv = li.shared_variable_net, sf = li.shared_fixed_net;
+      document.getElementById('billTable').innerHTML = `
+        <tr><td><b>Individualni promenljivi deo, neto</b></td><td>${money(ov)}</td></tr>
+        <tr class="sub-row"><td>Vaša izmerena potrošnja</td><td>${num(li.consumption_kwh)} kWh</td></tr>
+        <tr><td><b>Individualni fiksni deo, neto</b></td><td>${money(of_)}</td></tr>
+        <tr class="sub-row"><td>Obračun po instalisanoj snazi</td><td>${li.capacity_kw != null ? FMT.format(li.capacity_kw) + ' kW' : '—'}</td></tr>
+        <tr><td><b>Zajednički promenljivi deo, neto</b></td><td>${money(sv)}</td></tr>
+        <tr><td><b>Zajednički fiksni deo, neto</b></td><td>${money(sf)}</td></tr>
+        <tr class="divider"><td>Neto međuzbir</td><td>${money(li.net_total)}</td></tr>
+        <tr><td>PDV ${li.vat_rate || '?'}%</td><td>${money(li.vat_total)}</td></tr>
+        <tr class="total-row"><td>Procenjeni GCE ukupno</td><td>${money(latest.total_amount)}</td></tr>
+      `;
+
+      // Comparison
+      if (comparison) {
+        const c = comparison;
+        const range = c.max_kwh - c.min_kwh || 1;
+        const myKwh = li.consumption_kwh || 0;
+        const pct = Math.max(2, Math.min(98, ((myKwh - c.min_kwh) / range) * 100));
+
+        document.getElementById('scaleDot').style.left = pct + '%';
+        document.getElementById('scaleLabels').innerHTML = `
+          <div><b>${num(c.min_kwh)} kWh</b>Najniže</div>
+          <div><b>${num(c.avg_kwh)} kWh</b>Prosek</div>
+          <div><b>${num(c.max_kwh)} kWh</b>Najviše</div>
+        `;
+        document.getElementById('rankText').innerHTML =
+          `Vaš stan je <b>${c.rank}. od ${c.total_apartments}</b> stanova po mesečnom GCE iznosu. ` +
+          `Skala prikazuje potrošnju u kWh, ne dinare.`;
+      } else {
+        document.getElementById('rankText').textContent = 'Nema dovoljno podataka za poređenje.';
+      }
+
+      // History bars
+      renderHistory(history, latest.period);
+    }
+
+    function renderHistory(history, currentPeriod) {
+      if (!history || history.length === 0) return;
+      const sorted = history.slice().sort((a, b) => a.period.localeCompare(b.period));
+      const maxKwh = Math.max(...sorted.map(h => h.consumption_kwh), 1);
+
+      document.getElementById('historyBars').innerHTML = sorted.map(h => {
+        const isCurrent = h.period === currentPeriod;
+        const isCooling = h.service_type === 'Hlađenje';
+        const cls = isCurrent ? 'history-bar--current' : isCooling ? 'history-bar--cooling' : 'history-bar--heating';
+        const barH = Math.max(4, Math.round((h.consumption_kwh / maxKwh) * 130));
+        const label = h.period.slice(2, 4) + '/' + h.period.slice(5, 7);
+        return `
+          <div class="history-bar-wrap" title="${formatPeriod(h.period)}: ${FMT0.format(h.consumption_kwh)} kWh">
+            <div class="history-bar ${cls}" style="height:${barH}px"></div>
+            <div class="history-month">${label}</div>
+            <div class="history-val">${FMT0.format(h.consumption_kwh)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      location.href = '/';
+    }
+
+    load();
+  </script>
+</body>
+</html>
