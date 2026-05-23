@@ -52,6 +52,9 @@
       gap: 12px;
       text-decoration: none;
       color: inherit;
+      font-family: inherit;
+      font-size: inherit;
+      background: var(--card);
     }
 
     .building-card:hover {
@@ -117,6 +120,64 @@
     }
     .admin-link a:hover { color: var(--ink); }
 
+    /* Sub-selection view */
+    .ch-group-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .ch-group-header__badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--soft-ch);
+      border-radius: 50px;
+      padding: 6px 14px 6px 8px;
+    }
+
+    .ch-group-header__icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: var(--accent-ch);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 0.9rem;
+    }
+
+    .ch-group-header__label {
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--accent-ch);
+    }
+
+    .back-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.875rem;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0;
+      margin-bottom: 20px;
+    }
+    .back-btn:hover { color: var(--ink); }
+
+    .ch-select-hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
     @media (max-width: 480px) {
       .building-grid {
         grid-template-columns: 1fr;
@@ -131,25 +192,74 @@
     <div class="landing__logo">Portelo</div>
     <div class="landing__tagline">Vaš stambeni portal</div>
 
-    <div class="building-grid">
-      <a href="/login?building=gce" class="building-card building-card--gce">
-        <div class="building-card__logo">G</div>
-        <div class="building-card__name">Green Comfort Energy</div>
-        <div class="building-card__desc">Verifikacija Infostan računa i potrošnja</div>
-        <div class="building-card__cta">Odaberi →</div>
-      </a>
+    <!-- Main view: GCE + C&H group -->
+    <div id="mainView">
+      <div class="building-grid">
+        <a href="/login?building=gce" class="building-card building-card--gce">
+          <div class="building-card__logo">G</div>
+          <div class="building-card__name">Green Comfort Energy</div>
+          <div class="building-card__desc">Verifikacija Infostan računa i potrošnja</div>
+          <div class="building-card__cta">Odaberi →</div>
+        </a>
 
-      <a href="/login?building=ch" class="building-card building-card--ch">
-        <div class="building-card__logo">C</div>
-        <div class="building-card__name">C&H Solutions</div>
-        <div class="building-card__desc">Pregled računa i istorija plaćanja</div>
-        <div class="building-card__cta">Odaberi →</div>
-      </a>
+        <button onclick="showChGroup()" class="building-card building-card--ch">
+          <div class="building-card__logo">C</div>
+          <div class="building-card__name">C&amp;H Solutions</div>
+          <div class="building-card__desc">Pregled računa i istorija plaćanja</div>
+          <div class="building-card__cta" style="color:var(--accent-ch)">Odaberi →</div>
+        </button>
+      </div>
+
+      <div class="admin-link">
+        <a href="/admin/login">Admin prijava</a>
+      </div>
     </div>
 
-    <div class="admin-link">
-      <a href="/admin/login">Admin prijava</a>
+    <!-- Sub-selection view: Zen Hill / Kovačeva -->
+    <div id="chGroupView" class="hidden">
+      <button class="back-btn" onclick="showMain()">← Nazad na izbor</button>
+
+      <div class="ch-group-header" style="justify-content:center">
+        <div class="ch-group-header__badge">
+          <div class="ch-group-header__icon">C</div>
+          <span class="ch-group-header__label">C&amp;H Solutions</span>
+        </div>
+      </div>
+
+      <p class="ch-select-hint">Odaberite Vašu zgradu</p>
+
+      <div class="building-grid">
+        <a href="/login?building=zh" class="building-card building-card--ch">
+          <div class="building-card__logo">Z</div>
+          <div class="building-card__name">Zen Hill</div>
+          <div class="building-card__desc">Pregled mesečnih troškova i uplata</div>
+          <div class="building-card__cta">Odaberi →</div>
+        </a>
+
+        <a href="/login?building=kv" class="building-card building-card--ch">
+          <div class="building-card__logo">K</div>
+          <div class="building-card__name">Kovačeva</div>
+          <div class="building-card__desc">Pregled mesečnih troškova i uplata</div>
+          <div class="building-card__cta">Odaberi →</div>
+        </a>
+      </div>
+
+      <div class="admin-link">
+        <a href="/admin/login">Admin prijava</a>
+      </div>
     </div>
   </main>
+
+  <script>
+    function showChGroup() {
+      document.getElementById('mainView').classList.add('hidden');
+      document.getElementById('chGroupView').classList.remove('hidden');
+    }
+
+    function showMain() {
+      document.getElementById('chGroupView').classList.add('hidden');
+      document.getElementById('mainView').classList.remove('hidden');
+    }
+  </script>
 </body>
 </html>

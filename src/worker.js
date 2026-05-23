@@ -6,7 +6,7 @@ import gceRoutes from '../modules/gce/routes.js';
 
 const assetManifest = JSON.parse(manifestJSON);
 
-// Map clean URLs to their .html files in the asset manifest
+// Map clean URLs to their .html files
 const PAGE_MAP = {
   '/': '/index.html',
   '/login': '/login.html',
@@ -16,11 +16,20 @@ const PAGE_MAP = {
   '/resident/gce/dashboard': '/resident/gce-dashboard.html',
 };
 
+// direct_billing buildings — route to ch module
+const DIRECT_BILLING_IDS = ['zh', 'kv'];
+
+function isDirectBillingPath(pathname) {
+  return DIRECT_BILLING_IDS.some(id =>
+    pathname.startsWith(`/api/admin/buildings/${id}/`) ||
+    pathname === `/api/admin/buildings/${id}`
+  );
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: {
@@ -32,12 +41,14 @@ export default {
       });
     }
 
-    // API routes — isolated module error boundaries
+    // Auth routes
     if (url.pathname.startsWith('/api/auth/')) {
-      return authRoutes.handle(request, env, ctx) ?? notFound();
+      return (await authRoutes.handle(request, env, ctx)) ?? notFound();
     }
 
-    if (url.pathname.startsWith('/api/admin/buildings/ch/') || url.pathname.startsWith('/api/resident/bills')) {
+    // Resident bills (direct_billing buildings — zh/kv)
+    if (url.pathname.startsWith('/api/resident/bills') ||
+        url.pathname.startsWith('/api/resident/dashboard/ch')) {
       try {
         const res = await chRoutes.handle(request, env, ctx);
         if (res) return res;
@@ -47,7 +58,9 @@ export default {
       }
     }
 
-    if (url.pathname.startsWith('/api/admin/buildings/gce/') || url.pathname.startsWith('/api/resident/infostan')) {
+    // GCE resident routes
+    if (url.pathname.startsWith('/api/resident/infostan') ||
+        url.pathname.startsWith('/api/resident/dashboard/gce')) {
       try {
         const res = await gceRoutes.handle(request, env, ctx);
         if (res) return res;
@@ -57,8 +70,8 @@ export default {
       }
     }
 
-    // Shared resident dashboard routes
-    if (url.pathname.startsWith('/api/resident/dashboard/ch')) {
+    // Admin routes for direct_billing buildings (zh, kv)
+    if (isDirectBillingPath(url.pathname)) {
       try {
         const res = await chRoutes.handle(request, env, ctx);
         if (res) return res;
@@ -68,28 +81,8 @@ export default {
       }
     }
 
-    if (url.pathname.startsWith('/api/resident/dashboard/gce')) {
-      try {
-        const res = await gceRoutes.handle(request, env, ctx);
-        if (res) return res;
-      } catch (err) {
-        console.error('[gce-module]', err);
-        return moduleError('gce');
-      }
-    }
-
-    // Admin electricity for ch handled in ch module
-    if (url.pathname.startsWith('/api/admin/buildings/ch')) {
-      try {
-        const res = await chRoutes.handle(request, env, ctx);
-        if (res) return res;
-      } catch (err) {
-        console.error('[ch-module]', err);
-        return moduleError('ch');
-      }
-    }
-
-    if (url.pathname.startsWith('/api/admin/buildings/gce')) {
+    // Admin routes for GCE
+    if (url.pathname.startsWith('/api/admin/buildings/gce/')) {
       try {
         const res = await gceRoutes.handle(request, env, ctx);
         if (res) return res;
@@ -102,8 +95,7 @@ export default {
     // General admin routes
     if (url.pathname.startsWith('/api/admin/')) {
       const { validateSession, getTokenFromRequest } = await import('../core/auth/session.js');
-      const { queryOne } = await import('../shared/db/index.js');
-      const { query } = await import('../shared/db/index.js');
+      const { queryOne, query } = await import('../shared/db/index.js');
       const { json, error } = await import('../shared/utils/index.js');
 
       const token = getTokenFromRequest(request);
@@ -114,17 +106,15 @@ export default {
         const { results } = await query(env.DB, 'SELECT * FROM buildings ORDER BY name');
         return json(results);
       }
-
       if (url.pathname === '/api/admin/me' && request.method === 'GET') {
         const admin = await queryOne(env.DB, 'SELECT id, email, role, building_id FROM admin_users WHERE id = ?', [session.admin_id]);
         return json(admin);
       }
     }
 
-    // Serve static pages via Workers KV asset handler
+    // Static pages
     if (request.method === 'GET') {
       try {
-        // Rewrite clean URLs to .html files
         const mappedPath = PAGE_MAP[url.pathname];
         let assetRequest = request;
         if (mappedPath) {

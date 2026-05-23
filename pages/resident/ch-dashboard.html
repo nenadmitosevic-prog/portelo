@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Moj portal — C&H Solutions</title>
+  <title>Moj portal — Portelo</title>
   <link rel="stylesheet" href="/css/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
@@ -17,7 +17,7 @@
   <header class="header">
     <div class="container">
       <div class="header__inner">
-        <div class="header__logo" style="color:var(--accent-ch)">C&H Solutions</div>
+        <div class="header__logo" style="color:var(--accent-ch)" id="buildingLogo">Portelo</div>
         <div class="header__nav">
           <span class="header__apt" id="aptLabel"></span>
           <button class="btn btn--outline btn--sm" onclick="logout()">Odjava</button>
@@ -106,7 +106,7 @@
     async function load() {
       try {
         const res = await fetch('/api/resident/dashboard/ch', { credentials: 'include' });
-        if (res.status === 401) { location.href = '/login?building=ch'; return; }
+        if (res.status === 401) { location.href = '/'; return; }
         const data = await res.json();
         render(data);
       } catch (e) {
@@ -114,8 +114,15 @@
       }
     }
 
-    function render({ resident, kpis, bills, electricity }) {
+    function render({ resident, building, kpis, bills, electricity }) {
       document.getElementById('aptLabel').textContent = `Stan ${resident.apartment_ref}${resident.display_name ? ' · ' + resident.display_name : ''}`;
+      if (building) {
+        document.getElementById('buildingLogo').textContent = building.name;
+        document.title = `Moj portal — ${building.name}`;
+        if (building.accent_color) {
+          document.documentElement.style.setProperty('--accent-ch', building.accent_color);
+        }
+      }
       document.getElementById('loadingState').classList.add('hidden');
       document.getElementById('content').classList.remove('hidden');
 

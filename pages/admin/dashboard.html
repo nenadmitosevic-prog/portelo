@@ -59,15 +59,15 @@
         <button class="btn btn--outline btn--sm" onclick="loadActiveTab()">Refresh</button>
       </div>
 
-      <!-- CH Tab -->
-      <div id="tab-ch" class="hidden">
-        <div class="kpi-row" id="ch-kpis"></div>
+      <!-- Direct Billing Tab (shared for zh / kv) -->
+      <div id="tab-direct" class="hidden">
+        <div class="kpi-row" id="direct-kpis"></div>
 
         <!-- Excel Import -->
         <div class="section card">
           <div class="section-header">
-            <div class="section-title">Import billing data</div>
-            <button class="btn btn--primary btn--sm" onclick="openImport('ch')">↑ Import Excel</button>
+            <div class="section-title" id="directTabTitle">Billing data</div>
+            <button class="btn btn--primary btn--sm" onclick="openImport(activeTab)">↑ Import Excel</button>
           </div>
           <p class="text-sm text-muted">Upload monthly billing Excel (NalogZaNaplatu format or simple format).</p>
         </div>
@@ -78,20 +78,20 @@
             <div class="section-title">Electricity bill PDF</div>
           </div>
           <div class="upload-row">
-            <div class="upload-box" onclick="document.getElementById('elecUploadCh').click()">
+            <div class="upload-box" onclick="document.getElementById('elecUploadDirect').click()">
               <div class="upload-box__title">Upload EPS bill PDF</div>
               <div class="upload-box__sub">Claude Haiku extracts period, kWh, and amount automatically</div>
-              <input type="file" id="elecUploadCh" accept=".pdf" class="hidden" onchange="uploadElectricity('ch', this)">
+              <input type="file" id="elecUploadDirect" accept=".pdf" class="hidden" onchange="uploadElectricity(activeTab, this)">
             </div>
           </div>
-          <div id="elecResultCh" class="mt-4"></div>
+          <div id="elecResultDirect" class="mt-4"></div>
         </div>
 
         <!-- Bills table -->
         <div class="section card">
           <div class="section-header">
             <div class="section-title">Bills</div>
-            <select class="pill-select" id="chStatusFilter" onchange="loadChBills()">
+            <select class="pill-select" id="directStatusFilter" onchange="loadDirectBills()">
               <option value="">All statuses</option>
               <option value="pending">Pending</option>
               <option value="paid">Paid</option>
@@ -111,7 +111,7 @@
                   <th>Actions</th>
                 </tr>
               </thead>
-              <tbody id="chBillsBody"></tbody>
+              <tbody id="directBillsBody"></tbody>
             </table>
           </div>
         </div>
@@ -249,12 +249,20 @@
       discrepancy_flagged: '<span class="badge badge--red">Discrepancy</span>',
     };
 
+    const TAB_LABELS = {
+      zh: 'Zen Hill',
+      kv: 'Kovačeva',
+      gce: 'Green Comfort Energy',
+    };
+
     let adminRole = 'superadmin';
     let adminBuildingId = null;
-    let activeTab = 'ch';
+    let activeTab = 'zh';
     let importTarget = null;
     let importPreviewData = null;
     let currentBillId = null;
+
+    function isDirectBilling(id) { return id === 'zh' || id === 'kv'; }
 
     // Populate period selector
     function populatePeriods() {
@@ -300,98 +308,129 @@
 
     function buildTabs() {
       const bar = document.getElementById('tabBar');
-      const tabs = adminRole === 'superadmin'
-        ? [{ id: 'ch', label: 'C&H Solutions' }, { id: 'gce', label: 'Green Comfort Energy' }]
-        : [{ id: adminBuildingId, label: adminBuildingId === 'ch' ? 'C&H Solutions' : 'Green Comfort Energy' }];
+      let tabs;
+      if (adminRole === 'superadmin') {
+        tabs = [
+          { id: 'zh',  label: 'Zen Hill' },
+          { id: 'kv',  label: 'Kovačeva' },
+          { id: 'gce', label: 'Green Comfort Energy' },
+        ];
+      } else {
+        tabs = [{ id: adminBuildingId, label: TAB_LABELS[adminBuildingId] || adminBuildingId }];
+      }
 
       activeTab = tabs[0].id;
       bar.innerHTML = tabs.map(t => `
-        <button class="tab ${t.id === activeTab ? 'active' : ''}" onclick="switchTab('${t.id}')">${t.label}</button>
+        <button class="tab ${t.id === activeTab ? 'active' : ''}" data-tab="${t.id}" onclick="switchTab('${t.id}')">${t.label}</button>
       `).join('');
     }
 
     function switchTab(id) {
       activeTab = id;
-      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.textContent.trim() === (id === 'ch' ? 'C&H Solutions' : 'Green Comfort Energy')));
-      document.getElementById('tab-ch').classList.toggle('hidden', id !== 'ch');
-      document.getElementById('tab-gce').classList.toggle('hidden', id !== 'gce');
+      document.querySelectorAll('.tab').forEach(t => {
+        t.classList.toggle('active', t.getAttribute('data-tab') === id);
+      });
       loadActiveTab();
     }
 
     function showTab(id) {
-      document.getElementById('tab-ch').classList.toggle('hidden', id !== 'ch');
+      document.getElementById('tab-direct').classList.toggle('hidden', !isDirectBilling(id));
       document.getElementById('tab-gce').classList.toggle('hidden', id !== 'gce');
+      if (isDirectBilling(id)) {
+        document.getElementById('directTabTitle').textContent = `${TAB_LABELS[id]} — Billing`;
+      }
     }
 
     function loadActiveTab() {
       showTab(activeTab);
-      if (activeTab === 'ch') { loadChSummary(); loadChBills(); }
+      if (isDirectBilling(activeTab)) { loadDirectSummary(); loadDirectBills(); }
       if (activeTab === 'gce') { loadGceSummary(); loadGceInfostan(); }
     }
 
-    async function loadChSummary() {
-      const res = await fetch(`/api/admin/buildings/ch/summary?period=${getPeriod()}`, { credentials: 'include' });
-      const d = await res.json();
-      document.getElementById('ch-kpis').innerHTML = `
-        <div class="kpi-card"><div class="kpi-card__label">Billed</div><div class="kpi-card__value">${fmt(d.total_billed)} RSD</div></div>
-        <div class="kpi-card"><div class="kpi-card__label">Collected</div><div class="kpi-card__value kpi-card__value--accent">${fmt(d.total_collected)} RSD</div></div>
-        <div class="kpi-card"><div class="kpi-card__label">Outstanding</div><div class="kpi-card__value ${d.outstanding > 0 ? 'kpi-card__value--danger' : ''}">${fmt(d.outstanding)} RSD</div></div>
-        <div class="kpi-card"><div class="kpi-card__label">Residents</div><div class="kpi-card__value">${d.resident_count}</div></div>
-      `;
+    async function loadDirectSummary() {
+      try {
+        const res = await fetch(`/api/admin/buildings/${activeTab}/summary?period=${getPeriod()}`, { credentials: 'include' });
+        const d = await res.json();
+        document.getElementById('direct-kpis').innerHTML = `
+          <div class="kpi-card"><div class="kpi-card__label">Billed</div><div class="kpi-card__value">${fmt(d.total_billed)} RSD</div></div>
+          <div class="kpi-card"><div class="kpi-card__label">Collected</div><div class="kpi-card__value kpi-card__value--accent">${fmt(d.total_collected)} RSD</div></div>
+          <div class="kpi-card"><div class="kpi-card__label">Outstanding</div><div class="kpi-card__value ${d.outstanding > 0 ? 'kpi-card__value--danger' : ''}">${fmt(d.outstanding)} RSD</div></div>
+          <div class="kpi-card"><div class="kpi-card__label">Residents</div><div class="kpi-card__value">${d.resident_count}</div></div>
+        `;
+      } catch {
+        document.getElementById('direct-kpis').innerHTML = '<div class="text-muted text-sm">Failed to load summary.</div>';
+      }
     }
 
-    async function loadChBills() {
-      const status = document.getElementById('chStatusFilter').value;
-      const url = `/api/admin/buildings/ch/bills?period=${getPeriod()}${status ? '&status='+status : ''}`;
-      const res = await fetch(url, { credentials: 'include' });
-      const bills = await res.json();
-      document.getElementById('chBillsBody').innerHTML = bills.map(b => `
-        <tr>
-          <td><strong>${b.apartment_ref}</strong></td>
-          <td>${b.display_name || '—'}</td>
-          <td>${fmt(b.total_amount)}</td>
-          <td>${STATUS_MAP[b.status] || b.status}</td>
-          <td>${b.paid_at ? b.paid_at.slice(0,10) : '—'}</td>
-          <td>
-            ${b.status !== 'paid' ? `<button class="btn btn--sm btn--outline" onclick="openPaidModal('${b.id}', ${b.total_amount})">Mark paid</button>` : ''}
-          </td>
-        </tr>
-      `).join('') || '<tr><td colspan="6" class="text-muted text-sm">No bills for this period</td></tr>';
+    async function loadDirectBills() {
+      try {
+        const status = document.getElementById('directStatusFilter').value;
+        const url = `/api/admin/buildings/${activeTab}/bills?period=${getPeriod()}${status ? '&status='+status : ''}`;
+        const res = await fetch(url, { credentials: 'include' });
+        const bills = await res.json();
+        document.getElementById('directBillsBody').innerHTML = bills.map(b => `
+          <tr>
+            <td><strong>${b.apartment_ref}</strong></td>
+            <td>${b.display_name || '—'}</td>
+            <td>${fmt(b.total_amount)}</td>
+            <td>${STATUS_MAP[b.status] || b.status}</td>
+            <td>${b.paid_at ? b.paid_at.slice(0,10) : '—'}</td>
+            <td>
+              ${b.status !== 'paid' ? `<button class="btn btn--sm btn--outline" onclick="openPaidModal('${b.id}', ${b.total_amount})">Mark paid</button>` : ''}
+            </td>
+          </tr>
+        `).join('') || '<tr><td colspan="6" class="text-muted text-sm">No bills for this period</td></tr>';
+      } catch {
+        document.getElementById('directBillsBody').innerHTML = '<tr><td colspan="6" class="text-muted text-sm">Failed to load bills.</td></tr>';
+      }
     }
 
     async function loadGceSummary() {
-      const res = await fetch(`/api/admin/buildings/gce/summary?period=${getPeriod()}`, { credentials: 'include' });
-      const d = await res.json();
-      document.getElementById('gce-kpis').innerHTML = `
-        <div class="kpi-card"><div class="kpi-card__label">Verified</div><div class="kpi-card__value kpi-card__value--accent">${d.verified_count}</div></div>
-        <div class="kpi-card"><div class="kpi-card__label">Discrepancies</div><div class="kpi-card__value ${d.discrepancy_count > 0 ? 'kpi-card__value--danger' : ''}">${d.discrepancy_count}</div></div>
-        <div class="kpi-card"><div class="kpi-card__label">Avg discrepancy</div><div class="kpi-card__value">${fmt(d.avg_discrepancy)} RSD</div></div>
-        <div class="kpi-card"><div class="kpi-card__label">Apartments</div><div class="kpi-card__value">${d.total_apartments}</div></div>
-      `;
+      try {
+        const res = await fetch(`/api/admin/buildings/gce/summary?period=${getPeriod()}`, { credentials: 'include' });
+        const d = await res.json();
+        document.getElementById('gce-kpis').innerHTML = `
+          <div class="kpi-card"><div class="kpi-card__label">Verified</div><div class="kpi-card__value kpi-card__value--accent">${d.verified_count}</div></div>
+          <div class="kpi-card"><div class="kpi-card__label">Discrepancies</div><div class="kpi-card__value ${d.discrepancy_count > 0 ? 'kpi-card__value--danger' : ''}">${d.discrepancy_count}</div></div>
+          <div class="kpi-card"><div class="kpi-card__label">Avg discrepancy</div><div class="kpi-card__value">${fmt(d.avg_discrepancy)} RSD</div></div>
+          <div class="kpi-card"><div class="kpi-card__label">Apartments</div><div class="kpi-card__value">${d.total_apartments}</div></div>
+        `;
+      } catch {
+        document.getElementById('gce-kpis').innerHTML = '<div class="text-muted text-sm">Failed to load summary.</div>';
+      }
     }
 
     async function loadGceInfostan() {
-      const res = await fetch(`/api/admin/buildings/gce/infostan?period=${getPeriod()}`, { credentials: 'include' });
-      const rows = await res.json();
-      document.getElementById('gceInfostanBody').innerHTML = rows.map(r => {
-        const disc = r.discrepancy_amount;
-        const discFmt = disc != null ? `<span style="color:${Math.abs(disc)<1?'var(--success)':disc>0?'var(--danger)':'var(--accent)'}">${disc > 0 ? '+' : ''}${fmt(disc)}</span>` : '—';
-        return `<tr>
-          <td><strong>${r.apartment_ref}</strong></td>
-          <td>${r.display_name || '—'}</td>
-          <td>${fmt(r.infostan_amount)}</td>
-          <td>${fmt(r.expected_amount)}</td>
-          <td>${discFmt}</td>
-          <td>${STATUS_MAP[r.status] || r.status}</td>
-        </tr>`;
-      }).join('') || '<tr><td colspan="6" class="text-muted text-sm">No data for this period</td></tr>';
+      try {
+        const res = await fetch(`/api/admin/buildings/gce/infostan?period=${getPeriod()}`, { credentials: 'include' });
+        const rows = await res.json();
+        document.getElementById('gceInfostanBody').innerHTML = rows.map(r => {
+          const disc = r.discrepancy_amount;
+          const discFmt = disc != null ? `<span style="color:${Math.abs(disc)<1?'var(--success)':disc>0?'var(--danger)':'var(--accent)'}">${disc > 0 ? '+' : ''}${fmt(disc)}</span>` : '—';
+          return `<tr>
+            <td><strong>${r.apartment_ref}</strong></td>
+            <td>${r.display_name || '—'}</td>
+            <td>${fmt(r.infostan_amount)}</td>
+            <td>${fmt(r.expected_amount)}</td>
+            <td>${discFmt}</td>
+            <td>${STATUS_MAP[r.status] || r.status}</td>
+          </tr>`;
+        }).join('') || '<tr><td colspan="6" class="text-muted text-sm">No data for this period</td></tr>';
+      } catch {
+        document.getElementById('gceInfostanBody').innerHTML = '<tr><td colspan="6" class="text-muted text-sm">Failed to load data.</td></tr>';
+      }
     }
 
     // --- Import modal ---
     function openImport(target) {
       importTarget = target;
-      const titles = { ch: 'Import C&H Billing Excel', gce: 'Import GCE Billing Excel', 'gce-residents': 'Import GCE Residents' };
-      document.getElementById('importModalTitle').textContent = titles[target] || 'Import Excel';
+      const labels = {
+        zh: 'Zen Hill Billing Excel',
+        kv: 'Kovačeva Billing Excel',
+        gce: 'GCE Billing Excel',
+        'gce-residents': 'GCE Residents',
+      };
+      document.getElementById('importModalTitle').textContent = `Import ${labels[target] || target}`;
       document.getElementById('importStep1').classList.remove('hidden');
       document.getElementById('importStep2').classList.add('hidden');
       document.getElementById('importResult').classList.add('hidden');
@@ -415,12 +454,11 @@
       const period = document.getElementById('importPeriod').value;
 
       if (importTarget === 'gce-residents') {
-        // No preview for residents, straight to confirm
         document.getElementById('importStep1').classList.add('hidden');
         document.getElementById('importStep2').classList.remove('hidden');
         document.getElementById('importPreviewInfo').textContent = 'Ready to import residents. This will add new residents (existing apartments will be skipped).';
         document.getElementById('importPreviewTable').innerHTML = '';
-        importPreviewData = { file, type: 'residents' };
+        importPreviewData = { file, type: 'gce-residents' };
         return;
       }
 
@@ -430,8 +468,8 @@
       fd.append('preview', '1');
 
       try {
-        const endpoint = importTarget === 'ch' ? '/api/admin/buildings/ch/excel/import' : '/api/admin/buildings/gce/excel/import';
-        const res = await fetch(endpoint, { method: 'POST', credentials: 'include', body: fd });
+        const buildingId = importTarget; // zh, kv, or gce
+        const res = await fetch(`/api/admin/buildings/${buildingId}/excel/import`, { method: 'POST', credentials: 'include', body: fd });
         const data = await res.json();
 
         if (!res.ok) return alert(data.error || 'Preview failed.');
@@ -461,9 +499,11 @@
       if (period) fd.append('period', period);
 
       let endpoint;
-      if (type === 'ch') endpoint = '/api/admin/buildings/ch/excel/import';
-      else if (type === 'gce') endpoint = '/api/admin/buildings/gce/excel/import';
-      else endpoint = '/api/admin/buildings/gce/excel/import-residents';
+      if (type === 'gce-residents') {
+        endpoint = '/api/admin/buildings/gce/excel/import-residents';
+      } else {
+        endpoint = `/api/admin/buildings/${type}/excel/import`;
+      }
 
       try {
         const res = await fetch(endpoint, { method: 'POST', credentials: 'include', body: fd });
@@ -491,7 +531,7 @@
     async function uploadElectricity(building, input) {
       const file = input.files[0];
       if (!file) return;
-      const resultEl = document.getElementById(`elecResult${building === 'ch' ? 'Ch' : 'Gce'}`);
+      const resultEl = document.getElementById(building === 'gce' ? 'elecResultGce' : 'elecResultDirect');
       resultEl.innerHTML = '<div class="text-muted text-sm">Extracting with Claude Haiku...</div>';
 
       const fd = new FormData();
@@ -528,14 +568,14 @@
     async function submitPaid() {
       const amount = parseFloat(document.getElementById('paidAmount').value);
       const date = document.getElementById('paidDate').value;
-      await fetch(`/api/admin/buildings/ch/bills/${currentBillId}`, {
+      await fetch(`/api/admin/buildings/${activeTab}/bills/${currentBillId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ status: 'paid', paid_amount: amount, paid_at: date }),
       });
       closePaidModal();
-      loadChBills();
+      loadDirectBills();
     }
 
     async function logout() {
