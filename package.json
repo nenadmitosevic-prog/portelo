@@ -11,6 +11,7 @@
     "db:seed:remote": "wrangler d1 execute portelo-db --file=migrations/002_seed.sql --remote"
   },
   "dependencies": {
+    "@cloudflare/kv-asset-handler": "^0.5.0",
     "bcryptjs": "^2.4.3",
     "xlsx": "^0.18.5"
   },

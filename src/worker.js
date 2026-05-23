@@ -1,8 +1,20 @@
+import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
+import manifestJSON from '__STATIC_CONTENT_MANIFEST';
 import authRoutes from '../core/auth/routes.js';
 import chRoutes from '../modules/ch-solutions/routes.js';
 import gceRoutes from '../modules/gce/routes.js';
 
-const STATIC_ROUTES = ['/', '/login', '/admin/dashboard', '/resident/ch/dashboard', '/resident/gce/dashboard'];
+const assetManifest = JSON.parse(manifestJSON);
+
+// Map clean URLs to their .html files in the asset manifest
+const PAGE_MAP = {
+  '/': '/index.html',
+  '/login': '/login.html',
+  '/admin/login': '/admin/login.html',
+  '/admin/dashboard': '/admin/dashboard.html',
+  '/resident/ch/dashboard': '/resident/ch-dashboard.html',
+  '/resident/gce/dashboard': '/resident/gce-dashboard.html',
+};
 
 export default {
   async fetch(request, env, ctx) {
@@ -109,9 +121,22 @@ export default {
       }
     }
 
-    // Serve static pages (Cloudflare Pages asset handling)
+    // Serve static pages via Workers KV asset handler
     if (request.method === 'GET') {
-      return env.ASSETS?.fetch(request) ?? serveStaticFallback(url.pathname);
+      try {
+        // Rewrite clean URLs to .html files
+        const mappedPath = PAGE_MAP[url.pathname];
+        let assetRequest = request;
+        if (mappedPath) {
+          assetRequest = new Request(new URL(mappedPath, url.origin).toString(), request);
+        }
+        return await getAssetFromKV(
+          { request: assetRequest, waitUntil: ctx.waitUntil.bind(ctx) },
+          { ASSET_NAMESPACE: env.__STATIC_CONTENT, ASSET_MANIFEST: assetManifest }
+        );
+      } catch {
+        return notFound();
+      }
     }
 
     return notFound();
@@ -119,10 +144,7 @@ export default {
 };
 
 function notFound() {
-  return new Response(JSON.stringify({ error: 'Not found' }), {
-    status: 404,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return new Response('Not found', { status: 404 });
 }
 
 function moduleError(module) {
@@ -130,8 +152,4 @@ function moduleError(module) {
     status: 503,
     headers: { 'Content-Type': 'application/json' },
   });
-}
-
-function serveStaticFallback(pathname) {
-  return new Response('Not found', { status: 404 });
 }
