@@ -9,7 +9,7 @@ bucket = "./pages"
 [[d1_databases]]
 binding = "DB"
 database_name = "portelo-db"
-database_id = "placeholder-replace-after-create"
+database_id = "a8c06eee-4a69-423b-8c07-01cdeb8ef9bb"
 
 [[r2_buckets]]
 binding = "BILLS_BUCKET"
