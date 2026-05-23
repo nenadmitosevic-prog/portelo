@@ -180,15 +180,15 @@
       </div>
 
       <!-- Bill detail + Comparison -->
-      <div class="two-col">
+      <div id="twoCol" class="two-col">
         <!-- Bill breakdown -->
         <div class="card">
           <div class="section-title">Pregled računa za tekući mesec</div>
           <table class="bill-table" id="billTable"></table>
         </div>
 
-        <!-- Comparison -->
-        <div class="card">
+        <!-- Comparison (hidden for commercial units) -->
+        <div class="card" id="comparisonCard">
           <div class="section-title">Anonimizovano poređenje potrošnje</div>
           <div class="comparison-card">
             <div class="text-sm text-muted" style="line-height:1.5">
@@ -297,7 +297,7 @@
         <tr class="total-row"><td>Procenjeni GCE ukupno</td><td>${money(latest.total_amount)}</td></tr>
       `;
 
-      // Comparison
+      // Comparison — hidden entirely for commercial units (API returns null)
       if (comparison) {
         const c = comparison;
         const range = c.max_kwh - c.min_kwh || 1;
@@ -314,7 +314,9 @@
           `Vaš stan je <b>${c.rank}. od ${c.total_apartments}</b> stanova po mesečnom GCE iznosu. ` +
           `Skala prikazuje potrošnju u kWh, ne dinare.`;
       } else {
-        document.getElementById('rankText').textContent = 'Nema dovoljno podataka za poređenje.';
+        // Commercial unit — collapse to single-column layout, hide comparison card
+        document.getElementById('comparisonCard').classList.add('hidden');
+        document.getElementById('twoCol').style.gridTemplateColumns = '1fr';
       }
 
       // History bars

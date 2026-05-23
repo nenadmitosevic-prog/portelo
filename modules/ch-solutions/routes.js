@@ -61,13 +61,20 @@ router.get('/api/resident/dashboard/gce-resident', async (req, env) => {
   const { results: bills } = await getResidentBills(env.DB, resident.id, 12);
   const latest = bills[0];
 
+  const isCommercial = apt => /^lokal/i.test(String(apt).trim());
+
   let comparison = null;
-  if (latest) {
+  // Commercial units (Lokal) don't get a comparison — their consumption is not representative
+  if (latest && !isCommercial(resident.apartment_ref)) {
     const latestItems = JSON.parse(latest.line_items || '{}');
 
-    // All other apartments' bills for the same building + period
+    // Peers: same building + period, exclude other commercial units and self
     const { results: peers } = await query(env.DB,
-      'SELECT total_amount, line_items FROM bills WHERE building_id = ? AND period = ? AND resident_id != ?',
+      `SELECT b.total_amount, b.line_items
+       FROM bills b
+       JOIN residents r ON b.resident_id = r.id
+       WHERE b.building_id = ? AND b.period = ? AND b.resident_id != ?
+         AND r.apartment_ref NOT LIKE 'Lokal%'`,
       [building.id, latest.period, resident.id]
     );
 
