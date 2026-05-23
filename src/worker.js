@@ -2,7 +2,6 @@ import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
 import manifestJSON from '__STATIC_CONTENT_MANIFEST';
 import authRoutes from '../core/auth/routes.js';
 import chRoutes from '../modules/ch-solutions/routes.js';
-import gceRoutes from '../modules/gce/routes.js';
 
 const assetManifest = JSON.parse(manifestJSON);
 
@@ -12,12 +11,18 @@ const PAGE_MAP = {
   '/login': '/login.html',
   '/admin/login': '/admin/login.html',
   '/admin/dashboard': '/admin/dashboard.html',
+  // All direct_billing buildings → shared dashboard page
+  '/resident/zh/dashboard': '/resident/ch-dashboard.html',
+  '/resident/kv/dashboard': '/resident/ch-dashboard.html',
+  '/resident/bv/dashboard': '/resident/ch-dashboard.html',
+  '/resident/ku/dashboard': '/resident/ch-dashboard.html',
+  // Legacy / fallback
   '/resident/ch/dashboard': '/resident/ch-dashboard.html',
   '/resident/gce/dashboard': '/resident/gce-dashboard.html',
 };
 
 // direct_billing buildings — route to ch module
-const DIRECT_BILLING_IDS = ['zh', 'kv'];
+const DIRECT_BILLING_IDS = ['zh', 'kv', 'bv', 'ku'];
 
 function isDirectBillingPath(pathname) {
   return DIRECT_BILLING_IDS.some(id =>
@@ -58,19 +63,7 @@ export default {
       }
     }
 
-    // GCE resident routes
-    if (url.pathname.startsWith('/api/resident/infostan') ||
-        url.pathname.startsWith('/api/resident/dashboard/gce')) {
-      try {
-        const res = await gceRoutes.handle(request, env, ctx);
-        if (res) return res;
-      } catch (err) {
-        console.error('[gce-module]', err);
-        return moduleError('gce');
-      }
-    }
-
-    // Admin routes for direct_billing buildings (zh, kv)
+    // Admin routes for direct_billing buildings (zh, kv, bv, ku)
     if (isDirectBillingPath(url.pathname)) {
       try {
         const res = await chRoutes.handle(request, env, ctx);
@@ -78,17 +71,6 @@ export default {
       } catch (err) {
         console.error('[ch-module]', err);
         return moduleError('ch');
-      }
-    }
-
-    // Admin routes for GCE
-    if (url.pathname.startsWith('/api/admin/buildings/gce/')) {
-      try {
-        const res = await gceRoutes.handle(request, env, ctx);
-        if (res) return res;
-      } catch (err) {
-        console.error('[gce-module]', err);
-        return moduleError('gce');
       }
     }
 

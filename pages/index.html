@@ -63,7 +63,7 @@
     }
 
     .building-card--gce:hover { border-color: var(--accent-gce); }
-    .building-card--ch:hover { border-color: var(--accent-ch); }
+    .building-card--ch:hover  { border-color: var(--accent-ch); }
 
     .building-card__logo {
       width: 64px;
@@ -76,27 +76,11 @@
       font-weight: 900;
     }
 
-    .building-card--gce .building-card__logo {
-      background: #e4f1ea;
-      color: var(--accent-gce);
-    }
+    .building-card--gce .building-card__logo { background: #e4f1ea; color: var(--accent-gce); }
+    .building-card--ch  .building-card__logo { background: var(--soft-ch); color: var(--accent-ch); }
 
-    .building-card--ch .building-card__logo {
-      background: var(--soft-ch);
-      color: var(--accent-ch);
-    }
-
-    .building-card__name {
-      font-weight: 700;
-      font-size: 1rem;
-      color: var(--ink);
-    }
-
-    .building-card__desc {
-      font-size: 0.8125rem;
-      color: var(--muted);
-      line-height: 1.4;
-    }
+    .building-card__name { font-weight: 700; font-size: 1rem; color: var(--ink); }
+    .building-card__desc { font-size: 0.8125rem; color: var(--muted); line-height: 1.4; }
 
     .building-card__cta {
       margin-top: 8px;
@@ -108,40 +92,34 @@
     }
 
     .building-card--gce .building-card__cta { color: var(--accent-gce); }
-    .building-card--ch .building-card__cta { color: var(--accent-ch); }
+    .building-card--ch  .building-card__cta { color: var(--accent-ch); }
 
-    .admin-link {
-      font-size: 0.8125rem;
-      color: var(--muted);
-    }
-    .admin-link a {
-      color: var(--muted);
-      border-bottom: 1px solid var(--line);
-    }
+    .admin-link { font-size: 0.8125rem; color: var(--muted); }
+    .admin-link a { color: var(--muted); border-bottom: 1px solid var(--line); }
     .admin-link a:hover { color: var(--ink); }
 
     /* Sub-selection view */
-    .ch-group-header {
+    .group-header {
       display: flex;
-      align-items: center;
-      gap: 12px;
+      justify-content: center;
       margin-bottom: 24px;
     }
 
-    .ch-group-header__badge {
+    .group-badge {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: var(--soft-ch);
       border-radius: 50px;
       padding: 6px 14px 6px 8px;
     }
 
-    .ch-group-header__icon {
+    .group-badge--gce { background: #e4f1ea; }
+    .group-badge--ch  { background: var(--soft-ch); }
+
+    .group-badge__icon {
       width: 28px;
       height: 28px;
       border-radius: 6px;
-      background: var(--accent-ch);
       color: #fff;
       display: flex;
       align-items: center;
@@ -150,11 +128,12 @@
       font-size: 0.9rem;
     }
 
-    .ch-group-header__label {
-      font-weight: 600;
-      font-size: 0.875rem;
-      color: var(--accent-ch);
-    }
+    .group-badge--gce .group-badge__icon { background: var(--accent-gce); }
+    .group-badge--ch  .group-badge__icon { background: var(--accent-ch); }
+
+    .group-badge__label { font-weight: 600; font-size: 0.875rem; }
+    .group-badge--gce .group-badge__label { color: var(--accent-gce); }
+    .group-badge--ch  .group-badge__label { color: var(--accent-ch); }
 
     .back-btn {
       background: none;
@@ -171,18 +150,10 @@
     }
     .back-btn:hover { color: var(--ink); }
 
-    .ch-select-hint {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-bottom: 20px;
-      text-align: center;
-    }
+    .select-hint { font-size: 0.8rem; color: var(--muted); margin-bottom: 20px; text-align: center; }
 
     @media (max-width: 480px) {
-      .building-grid {
-        grid-template-columns: 1fr;
-        max-width: 320px;
-      }
+      .building-grid { grid-template-columns: 1fr; max-width: 320px; }
       .landing__logo { font-size: 2rem; }
     }
   </style>
@@ -192,17 +163,17 @@
     <div class="landing__logo">Portelo</div>
     <div class="landing__tagline">Vaš stambeni portal</div>
 
-    <!-- Main view: GCE + C&H group -->
+    <!-- Main view: two group cards -->
     <div id="mainView">
       <div class="building-grid">
-        <a href="/login?building=gce" class="building-card building-card--gce">
+        <button onclick="showGroup('gce')" class="building-card building-card--gce">
           <div class="building-card__logo">G</div>
           <div class="building-card__name">Green Comfort Energy</div>
-          <div class="building-card__desc">Verifikacija Infostan računa i potrošnja</div>
-          <div class="building-card__cta">Odaberi →</div>
-        </a>
+          <div class="building-card__desc">Pregled računa i istorija plaćanja</div>
+          <div class="building-card__cta" style="color:var(--accent-gce)">Odaberi →</div>
+        </button>
 
-        <button onclick="showChGroup()" class="building-card building-card--ch">
+        <button onclick="showGroup('ch')" class="building-card building-card--ch">
           <div class="building-card__logo">C</div>
           <div class="building-card__name">C&amp;H Solutions</div>
           <div class="building-card__desc">Pregled računa i istorija plaćanja</div>
@@ -215,18 +186,52 @@
       </div>
     </div>
 
-    <!-- Sub-selection view: Zen Hill / Kovačeva -->
-    <div id="chGroupView" class="hidden">
+    <!-- GCE sub-selection: Baba Višnjina / Kursulina -->
+    <div id="gceGroupView" class="hidden">
       <button class="back-btn" onclick="showMain()">← Nazad na izbor</button>
 
-      <div class="ch-group-header" style="justify-content:center">
-        <div class="ch-group-header__badge">
-          <div class="ch-group-header__icon">C</div>
-          <span class="ch-group-header__label">C&amp;H Solutions</span>
+      <div class="group-header">
+        <div class="group-badge group-badge--gce">
+          <div class="group-badge__icon">G</div>
+          <span class="group-badge__label">Green Comfort Energy</span>
         </div>
       </div>
 
-      <p class="ch-select-hint">Odaberite Vašu zgradu</p>
+      <p class="select-hint">Odaberite Vašu zgradu</p>
+
+      <div class="building-grid">
+        <a href="/login?building=bv" class="building-card building-card--gce">
+          <div class="building-card__logo">B</div>
+          <div class="building-card__name">Baba Višnjina</div>
+          <div class="building-card__desc">Pregled mesečnih troškova i uplata</div>
+          <div class="building-card__cta">Odaberi →</div>
+        </a>
+
+        <a href="/login?building=ku" class="building-card building-card--gce">
+          <div class="building-card__logo">K</div>
+          <div class="building-card__name">Kursulina</div>
+          <div class="building-card__desc">Pregled mesečnih troškova i uplata</div>
+          <div class="building-card__cta">Odaberi →</div>
+        </a>
+      </div>
+
+      <div class="admin-link">
+        <a href="/admin/login">Admin prijava</a>
+      </div>
+    </div>
+
+    <!-- C&H sub-selection: Zen Hill / Kovačeva -->
+    <div id="chGroupView" class="hidden">
+      <button class="back-btn" onclick="showMain()">← Nazad na izbor</button>
+
+      <div class="group-header">
+        <div class="group-badge group-badge--ch">
+          <div class="group-badge__icon">C</div>
+          <span class="group-badge__label">C&amp;H Solutions</span>
+        </div>
+      </div>
+
+      <p class="select-hint">Odaberite Vašu zgradu</p>
 
       <div class="building-grid">
         <a href="/login?building=zh" class="building-card building-card--ch">
@@ -251,12 +256,15 @@
   </main>
 
   <script>
-    function showChGroup() {
+    function showGroup(group) {
       document.getElementById('mainView').classList.add('hidden');
-      document.getElementById('chGroupView').classList.remove('hidden');
+      document.getElementById('gceGroupView').classList.add('hidden');
+      document.getElementById('chGroupView').classList.add('hidden');
+      document.getElementById(group + 'GroupView').classList.remove('hidden');
     }
 
     function showMain() {
+      document.getElementById('gceGroupView').classList.add('hidden');
       document.getElementById('chGroupView').classList.add('hidden');
       document.getElementById('mainView').classList.remove('hidden');
     }
