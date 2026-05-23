@@ -117,9 +117,9 @@
       transition: opacity 0.15s;
     }
     .history-bar:hover { opacity: 0.8; }
-    .history-bar--heating  { background: linear-gradient(180deg, #6ebc7d, #1e7f54); }
+    .history-bar--heating  { background: linear-gradient(180deg, #ffb347, #e07b00); }
     .history-bar--cooling  { background: linear-gradient(180deg, #7ec8e3, #0077aa); }
-    .history-bar--current  { background: linear-gradient(180deg, #a8d5bb, #2e9d6a); opacity: 0.7; }
+    .history-bar--current  { background: linear-gradient(180deg, #6ebc7d, #1e7f54); }
     .history-month { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
     .history-val   { font-size: 0.72rem; font-weight: 700; color: var(--ink); }
 
@@ -210,7 +210,7 @@
       <div class="card history-section">
         <div class="section-title">Istorija potrošnje</div>
         <div class="text-sm text-muted" style="margin-bottom:16px">
-          Mesečna potrošnja u kWh iz uvezenih Excel fajlova. Tekući mesec je obeležen svetlijom bojom.
+          Mesečna potrošnja u kWh. Tekući mesec je obeležen zelenom bojom.
         </div>
         <div class="history-bars" id="historyBars"></div>
       </div>
