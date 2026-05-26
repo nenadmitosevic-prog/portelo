@@ -118,18 +118,24 @@ router.get('/api/resident/dashboard/ch', async (req, env) => {
   if (!ctx) return error('Unauthorized', 401);
   const { resident, building } = ctx;
 
-  const [kpis, { results: bills }, electricity] = await Promise.all([
-    getResidentKPIs(env.DB, resident.id),
+  const [kpis, { results: bills }, { results: payments }] = await Promise.all([
+    getResidentKPIs(env.DB, resident.id, resident.outstanding_override ?? null),
     getResidentBills(env.DB, resident.id, 12),
-    query(env.DB, 'SELECT * FROM electricity_bills WHERE building_id = ? ORDER BY period DESC LIMIT 12', [resident.building_id]),
+    query(env.DB,
+      'SELECT id, amount, booked_date, reference, note FROM payments WHERE resident_id = ? ORDER BY booked_date DESC LIMIT 24',
+      [resident.id]
+    ),
   ]);
 
   return json({
     resident: { id: resident.id, apartment_ref: resident.apartment_ref, display_name: resident.display_name, building_id: resident.building_id },
     building: { id: building.id, name: building.name, accent_color: building.accent_color },
-    kpis,
+    kpis: {
+      ...kpis,
+      current: kpis.current ? { ...kpis.current, line_items: JSON.parse(kpis.current.line_items || '[]') } : null,
+    },
     bills: bills.map(b => ({ ...b, line_items: JSON.parse(b.line_items || '[]') })),
-    electricity: electricity.results,
+    payments,
   });
 });
 
@@ -148,7 +154,7 @@ router.get('/api/admin/buildings/:bid/residents', async (req, env, _ctx, params)
   const admin = await requireAdminSession(req, env.DB, params.bid);
   if (!admin) return error('Unauthorized', 401);
   const { results } = await query(env.DB,
-    'SELECT id, apartment_ref, display_name, email, phone, active, created_at FROM residents WHERE building_id = ? ORDER BY CAST(apartment_ref AS INTEGER), apartment_ref',
+    'SELECT id, apartment_ref, display_name, email, phone, active, outstanding_override, created_at FROM residents WHERE building_id = ? ORDER BY CAST(apartment_ref AS INTEGER), apartment_ref',
     [params.bid]
   );
   return json(results);
@@ -188,6 +194,7 @@ router.put('/api/admin/buildings/:bid/residents/:rid', async (req, env, _ctx, pa
   }
   if (body.display_name !== undefined) { fields.push('display_name = ?'); values.push(body.display_name); }
   if (body.active !== undefined) { fields.push('active = ?'); values.push(body.active ? 1 : 0); }
+  if (body.outstanding_override !== undefined) { fields.push('outstanding_override = ?'); values.push(body.outstanding_override !== null ? Number(body.outstanding_override) : null); }
 
   if (!fields.length) return error('Nothing to update');
   values.push(params.rid, params.bid);
@@ -294,6 +301,29 @@ router.get('/api/admin/buildings/:bid/electricity', async (req, env, _ctx, param
     [params.bid]
   );
   return json(results);
+});
+
+router.get('/api/admin/buildings/:bid/residents/:rid/payments', async (req, env, _ctx, params) => {
+  const admin = await requireAdminSession(req, env.DB, params.bid);
+  if (!admin) return error('Unauthorized', 401);
+  const { results } = await query(env.DB,
+    'SELECT * FROM payments WHERE resident_id = ? ORDER BY booked_date DESC',
+    [params.rid]
+  );
+  return json(results);
+});
+
+router.post('/api/admin/buildings/:bid/residents/:rid/payments', async (req, env, _ctx, params) => {
+  const admin = await requireAdminSession(req, env.DB, params.bid);
+  if (!admin) return error('Unauthorized', 401);
+  const body = await req.json();
+  if (!body.amount || !body.booked_date) return error('amount and booked_date required');
+  const id = generateId('pay');
+  await run(env.DB,
+    'INSERT INTO payments (id, resident_id, building_id, amount, booked_date, reference, note) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [id, params.rid, params.bid, Number(body.amount), body.booked_date, body.reference || null, body.note || null]
+  );
+  return json({ id }, 201);
 });
 
 export default router;

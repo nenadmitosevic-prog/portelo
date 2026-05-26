@@ -16,9 +16,6 @@ const PAGE_MAP = {
   '/resident/kv/dashboard': '/resident/ch-dashboard.html',
   '/resident/bv/dashboard': '/resident/gce-resident-dashboard.html',
   '/resident/ku/dashboard': '/resident/gce-resident-dashboard.html',
-  // Legacy / fallback
-  '/resident/ch/dashboard': '/resident/ch-dashboard.html',
-  '/resident/gce/dashboard': '/resident/gce-dashboard.html',
 };
 
 // direct_billing buildings — route to ch module

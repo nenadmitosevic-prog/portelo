@@ -5,12 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Moj portal — Portelo</title>
   <link rel="stylesheet" href="/css/styles.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     :root { --accent: var(--accent-ch); --soft: var(--soft-ch); }
     body { padding-bottom: 48px; }
     .main { padding-top: 24px; }
     .section { margin-bottom: 24px; }
+    .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 8px 0; }
+    .qr-img { width: 220px; height: 220px; border-radius: 8px; display: block; }
+    .qr-amount { font-size: 1.5rem; font-weight: 700; color: var(--danger, #e53935); }
+    .qr-note { font-size: 0.8rem; color: var(--muted); text-align: center; max-width: 280px; }
+    .payment-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .payment-row:last-child { border-bottom: none; }
+    .payment-date { font-size: 0.8rem; color: var(--muted); }
+    .payment-amount { font-weight: 700; color: var(--success, #2e7d32); }
+    .payment-note { font-size: 0.75rem; color: var(--muted); }
+    .invoice-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+    .invoice-issuer { display: flex; flex-direction: column; gap: 2px; }
+    .invoice-ref { display: flex; flex-direction: column; gap: 2px; text-align: right; flex-shrink: 0; }
+    .invoice-recipient { padding: 8px 0 10px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+    .invoice-totals { padding-top: 4px; }
+    .li-breakdown { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -20,6 +34,7 @@
         <div class="header__logo" style="color:var(--accent-ch)" id="buildingLogo">Portelo</div>
         <div class="header__nav">
           <span class="header__apt" id="aptLabel"></span>
+          <button class="btn btn--outline btn--sm" onclick="openPinModal()">PIN</button>
           <button class="btn btn--outline btn--sm" onclick="logout()">Odjava</button>
         </div>
       </div>
@@ -36,19 +51,42 @@
       <!-- Current Bill -->
       <div class="section card" id="currentBillCard">
         <div class="section-header">
-          <div class="section-title">Tekući račun</div>
+          <div class="section-title">Poslednji račun</div>
           <span id="currentBillBadge"></span>
         </div>
         <div id="currentBillContent"></div>
       </div>
 
-      <!-- Payment History -->
+      <!-- QR code for debt payment (shown only when outstanding > 0) -->
+      <div class="section card hidden" id="qrCard">
+        <div class="section-header">
+          <div class="section-title">Uplata duga</div>
+        </div>
+        <div class="qr-wrap">
+          <div class="qr-amount" id="qrAmount"></div>
+          <img id="qrImg" class="qr-img" alt="QR kod za plaćanje">
+          <div class="qr-note">Skenirajte QR kod u mobilnoj aplikaciji banke za brzo plaćanje celokupnog duga.</div>
+          <button class="btn btn--outline btn--sm" onclick="downloadQR()">Preuzmi QR kod</button>
+        </div>
+      </div>
+
+      <!-- Recorded payments from bookkeeper -->
+      <div class="section card" id="paymentsCard">
+        <div class="section-header">
+          <div class="section-title">Zabeležene uplate</div>
+        </div>
+        <div id="paymentsContent">
+          <p class="text-muted text-sm">Nema zabeleženih uplata.</p>
+        </div>
+      </div>
+
+      <!-- Bills History -->
       <div class="section card">
         <div class="section-header">
-          <div class="section-title">Istorija plaćanja</div>
+          <div class="section-title">Istorija računa</div>
         </div>
         <div class="table-wrap">
-          <table id="historyTable">
+          <table>
             <thead>
               <tr>
                 <th>Period</th>
@@ -62,30 +100,18 @@
         </div>
       </div>
 
-      <!-- Electricity Panel -->
-      <div class="section card">
-        <div class="section-header">
-          <div class="section-title">Električna energija zgrade</div>
-        </div>
-        <canvas id="electricityChart" height="180"></canvas>
-        <div class="table-wrap mt-4">
-          <table id="electricityTable">
-            <thead>
-              <tr>
-                <th>Period</th>
-                <th>Potrošnja (kWh)</th>
-                <th>Iznos (RSD)</th>
-              </tr>
-            </thead>
-            <tbody id="electricityBody"></tbody>
-          </table>
-        </div>
-      </div>
-
     </div>
   </main>
 
   <script>
+    const PAYMENT_CONFIG = {
+      account: '340-0000011028170-83',
+      name: 'C&H Solution d.o.o.',
+      pib: '110763641',
+      address: 'Svetog Save 33 III/7, 11050 Beograd',
+      purpose: 'Komunalne usluge',
+    };
+
     const FMT = new Intl.NumberFormat('sr-RS', { maximumFractionDigits: 0 });
     const fmt = v => v != null ? FMT.format(v) + ' RSD' : '—';
 
@@ -103,6 +129,47 @@
       return `${months[parseInt(m)-1]} ${y}`;
     }
 
+    function formatDate(d) {
+      if (!d) return '—';
+      // SQLite datetime uses space separator ('2026-04-01 12:34:56') which V8 parses as Invalid Date.
+      // Slice to 'YYYY-MM-DD' and split to avoid timezone/Invalid Date issues.
+      const [y, m, day] = String(d).slice(0, 10).split('-');
+      return `${day}.${m}.${y}`;
+    }
+
+    function buildIpsQrString(amount, buildingId, aptRef) {
+      const amountStr = amount.toFixed(2).replace('.', ',');
+      const account = PAYMENT_CONFIG.account.replace(/-/g, '');
+      const ref = buildingId.toUpperCase() + String(aptRef).trim();
+      return [
+        'K:PR', 'V:01', 'C:1',
+        `R:${account}`,
+        `N:${PAYMENT_CONFIG.name}`,
+        `I:RSD${amountStr}`,
+        'SF:289',
+        `S:${PAYMENT_CONFIG.purpose}`,
+        `RO:00${ref}`,
+      ].join('|');
+    }
+
+    let _qrImgSrc = null;
+
+    async function downloadQR() {
+      if (!_qrImgSrc) return;
+      try {
+        const resp = await fetch(_qrImgSrc);
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'uplata-qr.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch {
+        window.open(_qrImgSrc, '_blank');
+      }
+    }
+
     async function load() {
       try {
         const res = await fetch('/api/resident/dashboard/ch', { credentials: 'include' });
@@ -114,7 +181,7 @@
       }
     }
 
-    function render({ resident, building, kpis, bills, electricity }) {
+    function render({ resident, building, kpis, bills, payments }) {
       document.getElementById('aptLabel').textContent = `Stan ${resident.apartment_ref}${resident.display_name ? ' · ' + resident.display_name : ''}`;
       if (building) {
         document.getElementById('buildingLogo').textContent = building.name;
@@ -126,11 +193,13 @@
       document.getElementById('loadingState').classList.add('hidden');
       document.getElementById('content').classList.remove('hidden');
 
-      // KPIs
       const current = kpis.current;
+      const lastPayment = payments && payments.length > 0 ? payments[0] : null;
+
+      // KPIs
       document.getElementById('kpiRow').innerHTML = `
         <div class="kpi-card">
-          <div class="kpi-card__label">Tekući račun</div>
+          <div class="kpi-card__label">Poslednji račun</div>
           <div class="kpi-card__value">${current ? fmt(current.total_amount) : '—'}</div>
         </div>
         <div class="kpi-card">
@@ -139,7 +208,7 @@
         </div>
         <div class="kpi-card">
           <div class="kpi-card__label">Poslednja uplata</div>
-          <div class="kpi-card__value" style="font-size:1rem">${kpis.lastPaid ? fmt(kpis.lastPaid.paid_amount) : '—'}</div>
+          <div class="kpi-card__value" style="font-size:1rem">${lastPayment ? fmt(lastPayment.amount) : (kpis.lastPaid ? fmt(kpis.lastPaid.paid_amount) : '—')}</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-card__label">Status</div>
@@ -147,77 +216,109 @@
         </div>
       `;
 
-      // Current bill detail
+      // Latest bill detail
       const billCard = document.getElementById('currentBillContent');
       if (current) {
         document.getElementById('currentBillBadge').innerHTML = STATUS_MAP[current.status] || '';
-        const lineItems = current.line_items || [];
-        billCard.innerHTML = `
-          <div class="text-sm text-muted mb-4">Period: ${formatPeriod(current.period)} · Rok: ${current.due_date || 'N/A'}</div>
-          ${lineItems.map(li => `
+        const lineItems = Array.isArray(current.line_items) ? current.line_items : [];
+        const VAT = 0.10;
+        const grossTotal = current.total_amount;
+        const netTotal = Math.round(grossTotal / (1 + VAT) * 100) / 100;
+        const vatTotal = Math.round((grossTotal - netTotal) * 100) / 100;
+        const billNo = `${resident.building_id.toUpperCase()}-${current.period.replace('-', '')}-${resident.apartment_ref}`;
+        const billDate = current.created_at ? formatDate(current.created_at) : '—';
+        const lineItemsHtml = lineItems.map(li => {
+          const net = Math.round(li.amount / (1 + VAT) * 100) / 100;
+          const vat = Math.round((li.amount - net) * 100) / 100;
+          const label = li.label.replace(/\s*\(SA\s+PDV\)/i, '').trim();
+          return `
             <div class="line-item">
-              <span>${li.label}</span>
+              <div>
+                <div>${label}</div>
+                <div class="li-breakdown">Bez PDV: ${fmt(net)} &nbsp;·&nbsp; PDV 10%: ${fmt(vat)}</div>
+              </div>
               <span class="font-bold">${fmt(li.amount)}</span>
+            </div>`;
+        }).join('');
+        billCard.innerHTML = `
+          <div class="invoice-head">
+            <div class="invoice-issuer">
+              <strong>${PAYMENT_CONFIG.name}</strong>
+              <span class="text-sm text-muted">PIB: ${PAYMENT_CONFIG.pib}</span>
+              <span class="text-sm text-muted">${PAYMENT_CONFIG.address}</span>
             </div>
-          `).join('')}
-          <div class="line-item font-bold" style="border-top:2px solid var(--line);margin-top:8px;padding-top:12px">
-            <span>Ukupno</span>
-            <span>${fmt(current.total_amount)}</span>
+            <div class="invoice-ref">
+              <span class="text-sm text-muted">Račun br.:</span>
+              <strong class="text-sm">${billNo}</strong>
+              <span class="text-sm text-muted">Datum: ${billDate}</span>
+            </div>
+          </div>
+          <div class="invoice-recipient">
+            <div class="text-sm text-muted">Primalac:</div>
+            <div><strong>${resident.display_name || 'Stan ' + resident.apartment_ref}</strong></div>
+            <div class="text-sm text-muted">${building.name}, Stan ${resident.apartment_ref}</div>
+          </div>
+          <div class="text-sm text-muted mb-8">Period usluge: <strong>${formatPeriod(current.period)}</strong>${current.due_date ? ' &nbsp;·&nbsp; Rok: ' + current.due_date : ''}</div>
+          ${lineItemsHtml}
+          <div class="invoice-totals">
+            ${lineItems.length > 0 ? `
+              <div class="line-item text-sm" style="color:var(--muted)">
+                <span>Osnova za PDV 10%</span><span>${fmt(netTotal)}</span>
+              </div>
+              <div class="line-item text-sm" style="color:var(--muted)">
+                <span>PDV 10%</span><span>${fmt(vatTotal)}</span>
+              </div>` : ''}
+            <div class="line-item font-bold" style="border-top:2px solid var(--line);margin-top:8px;padding-top:12px">
+              <span>Ukupno za plaćanje</span>
+              <span>${fmt(current.total_amount)}</span>
+            </div>
           </div>
           ${current.notes ? `<div class="alert alert--warn mt-4">${current.notes}</div>` : ''}
         `;
       } else {
-        billCard.innerHTML = '<p class="text-muted text-sm">Nema podataka za tekući period.</p>';
+        billCard.innerHTML = '<p class="text-muted text-sm">Nema faktura.</p>';
       }
 
-      // History table
+      // QR code for outstanding debt — uses quickchart.io (server-side render, no JS lib needed)
+      if (kpis.outstanding > 0) {
+        const qrCard = document.getElementById('qrCard');
+        qrCard.classList.remove('hidden');
+        document.getElementById('qrAmount').textContent = fmt(kpis.outstanding);
+        const qrStr = buildIpsQrString(kpis.outstanding, resident.building_id, resident.apartment_ref);
+        _qrImgSrc = `https://quickchart.io/qr?text=${encodeURIComponent(qrStr)}&size=220&ecLevel=M&margin=2`;
+        document.getElementById('qrImg').src = _qrImgSrc;
+      }
+
+      // Recorded payments — hide section when empty
+      const paymentsCard = document.getElementById('paymentsCard');
+      const paymentsContent = document.getElementById('paymentsContent');
+      if (payments && payments.length > 0) {
+        paymentsContent.innerHTML = payments.map(p => `
+          <div class="payment-row">
+            <div>
+              <div class="payment-date">${p.booked_date}</div>
+              ${p.note ? `<div class="payment-note">${p.note}</div>` : ''}
+              ${p.reference ? `<div class="payment-note">Ref: ${p.reference}</div>` : ''}
+            </div>
+            <div class="payment-amount">+${fmt(p.amount)}</div>
+          </div>
+        `).join('');
+      } else {
+        paymentsCard.classList.add('hidden');
+      }
+
+      // Bills history table
       const tbody = document.getElementById('historyBody');
-      tbody.innerHTML = bills.map(b => `
-        <tr>
-          <td>${formatPeriod(b.period)}</td>
-          <td>${fmt(b.total_amount)}</td>
-          <td>${STATUS_MAP[b.status] || b.status}</td>
-          <td>${b.paid_at ? b.paid_at.slice(0,10) : '—'}</td>
-        </tr>
-      `).join('') || '<tr><td colspan="4" class="text-muted text-sm">Nema podataka</td></tr>';
-
-      // Electricity
-      const elBody = document.getElementById('electricityBody');
-      elBody.innerHTML = electricity.map(e => `
-        <tr>
-          <td>${formatPeriod(e.period)}</td>
-          <td>${e.consumption_kwh != null ? FMT.format(e.consumption_kwh) + ' kWh' : '—'}</td>
-          <td>${e.total_amount != null ? fmt(e.total_amount) : '—'}</td>
-        </tr>
-      `).join('') || '<tr><td colspan="3" class="text-muted text-sm">Nema podataka</td></tr>';
-
-      if (electricity.length > 0) {
-        const ctx = document.getElementById('electricityChart');
-        const labels = electricity.slice().reverse().map(e => formatPeriod(e.period));
-        const kwh = electricity.slice().reverse().map(e => e.consumption_kwh || 0);
-        new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels,
-            datasets: [{
-              label: 'Potrošnja (kWh)',
-              data: kwh,
-              backgroundColor: '#2c5f8a44',
-              borderColor: '#2c5f8a',
-              borderWidth: 2,
-              borderRadius: 6,
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: {
-              y: { beginAtZero: true, grid: { color: '#dbe5df' } },
-              x: { grid: { display: false } },
-            },
-          },
-        });
-      }
+      tbody.innerHTML = (bills && bills.length)
+        ? bills.map(b => `
+            <tr>
+              <td>${formatPeriod(b.period)}</td>
+              <td>${fmt(b.total_amount)}</td>
+              <td>${STATUS_MAP[b.status] || b.status}</td>
+              <td>${b.paid_at ? b.paid_at.slice(0,10) : '—'}</td>
+            </tr>
+          `).join('')
+        : '<tr><td colspan="4" class="text-muted text-sm">Nema podataka</td></tr>';
     }
 
     async function logout() {
@@ -226,6 +327,85 @@
     }
 
     load();
+
+    // ── PIN change modal ──────────────────────────────────────────────────────
+    function openPinModal() {
+      document.getElementById('pinCurrent').value = '';
+      document.getElementById('pinNew').value = '';
+      document.getElementById('pinConfirm').value = '';
+      const msg = document.getElementById('pinModalMsg');
+      msg.textContent = '';
+      msg.className = 'alert hidden';
+      document.getElementById('pinModal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('pinCurrent').focus(), 50);
+    }
+
+    function closePinModal() {
+      document.getElementById('pinModal').classList.add('hidden');
+    }
+
+    async function changePin() {
+      const current = document.getElementById('pinCurrent').value.trim();
+      const newPin  = document.getElementById('pinNew').value.trim();
+      const confirm = document.getElementById('pinConfirm').value.trim();
+      const msg = document.getElementById('pinModalMsg');
+      const btn = document.getElementById('pinSaveBtn');
+
+      function showMsg(text, type) {
+        msg.textContent = text;
+        msg.className = `alert alert--${type}`;
+      }
+
+      if (!current || !newPin || !confirm) return showMsg('Popunite sva polja.', 'error');
+      if (!/^\d{4,6}$/.test(newPin)) return showMsg('Novi PIN mora biti 4 do 6 cifara.', 'error');
+      if (newPin !== confirm) return showMsg('Novi PIN i potvrda se ne poklapaju.', 'error');
+
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/auth/change-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ current_pin: current, new_pin: newPin }),
+        });
+        const data = await res.json();
+        if (!res.ok) return showMsg(data.error || 'Greška. Pokušajte ponovo.', 'error');
+        showMsg('PIN uspešno promenjen!', 'success');
+        setTimeout(() => closePinModal(), 1500);
+      } catch {
+        showMsg('Greška. Pokušajte ponovo.', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closePinModal();
+    });
   </script>
+
+  <!-- PIN change modal -->
+  <div id="pinModal" class="modal-backdrop hidden" onclick="if(event.target===this)closePinModal()">
+    <div class="modal">
+      <div class="modal__title">Promeni PIN</div>
+      <div id="pinModalMsg" class="alert hidden"></div>
+      <div class="form-group">
+        <label class="label">Trenutni PIN</label>
+        <input class="input input--pin" type="password" id="pinCurrent" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="••••">
+      </div>
+      <div class="form-group">
+        <label class="label">Novi PIN (4–6 cifara)</label>
+        <input class="input input--pin" type="password" id="pinNew" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="••••">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="label">Potvrdi novi PIN</label>
+        <input class="input input--pin" type="password" id="pinConfirm" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="••••">
+      </div>
+      <div class="flex gap-2 mt-4" style="justify-content:flex-end">
+        <button class="btn btn--outline" onclick="closePinModal()">Otkaži</button>
+        <button class="btn btn--primary" id="pinSaveBtn" onclick="changePin()">Sačuvaj</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

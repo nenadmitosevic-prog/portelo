@@ -1,8 +1,8 @@
 import { Router } from '../router.js';
-import { loginResident } from './pin.js';
+import { loginResident, hashPin, verifyPin } from './pin.js';
 import { loginAdmin } from './admin.js';
 import { createSession, deleteSession, getTokenFromRequest, setSessionCookie, clearSessionCookie, validateSession } from './session.js';
-import { queryOne } from '../../shared/db/index.js';
+import { queryOne, run } from '../../shared/db/index.js';
 import { json, error } from '../../shared/utils/index.js';
 
 const router = new Router();
@@ -70,6 +70,33 @@ router.post('/api/auth/logout', async (req, env) => {
       'Set-Cookie': clearSessionCookie(),
     },
   });
+});
+
+router.post('/api/auth/change-pin', async (req, env) => {
+  const token = getTokenFromRequest(req);
+  const session = await validateSession(env.DB, token);
+  if (!session || !session.resident_id) return error('Unauthorized', 401);
+
+  const body = await req.json();
+  const { current_pin, new_pin } = body;
+
+  if (!current_pin || !new_pin) return error('current_pin and new_pin su obavezni.');
+  if (!/^\d{4,6}$/.test(String(new_pin))) return error('Novi PIN mora biti 4 do 6 cifara.');
+
+  const resident = await queryOne(env.DB, 'SELECT * FROM residents WHERE id = ?', [session.resident_id]);
+  if (!resident) return error('Unauthorized', 401);
+
+  const valid = await verifyPin(current_pin, resident.pin_hash);
+  if (!valid) return error('Trenutni PIN nije tačan.', 401);
+
+  if (String(current_pin) === String(new_pin)) return error('Novi PIN mora biti drugačiji od trenutnog.');
+
+  const newHash = await hashPin(new_pin);
+  await run(env.DB, 'UPDATE residents SET pin_hash = ? WHERE id = ?', [newHash, resident.id]);
+  // Invalidate all other sessions — keep current one active
+  await run(env.DB, 'DELETE FROM sessions WHERE resident_id = ? AND token != ?', [resident.id, token]);
+
+  return json({ ok: true });
 });
 
 router.get('/api/auth/me', async (req, env) => {

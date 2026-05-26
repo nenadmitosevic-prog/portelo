@@ -1,5 +1,5 @@
 import { query, queryOne, run } from '../../shared/db/index.js';
-import { generateId, currentPeriod, periodToYYYYMM } from '../../shared/utils/index.js';
+import { generateId, periodToYYYYMM } from '../../shared/utils/index.js';
 
 export async function getResidentBills(db, residentId, limit = 12) {
   return query(db,
@@ -15,17 +15,18 @@ export async function getBillDetail(db, billId, residentId) {
   );
 }
 
-export async function getResidentKPIs(db, residentId) {
-  const period = currentPeriod();
+export async function getResidentKPIs(db, residentId, outstandingOverride = null) {
   const [current, outstanding, lastPaid] = await Promise.all([
     queryOne(db,
-      'SELECT * FROM bills WHERE resident_id = ? AND period = ?',
-      [residentId, period]
-    ),
-    queryOne(db,
-      'SELECT COALESCE(SUM(total_amount - paid_amount), 0) as total FROM bills WHERE resident_id = ? AND status IN ("pending","overdue","partial")',
+      'SELECT * FROM bills WHERE resident_id = ? ORDER BY period DESC LIMIT 1',
       [residentId]
     ),
+    outstandingOverride !== null
+      ? Promise.resolve({ total: outstandingOverride })
+      : queryOne(db,
+          'SELECT COALESCE(SUM(total_amount - paid_amount), 0) as total FROM bills WHERE resident_id = ? AND status IN ("pending","overdue","partial")',
+          [residentId]
+        ),
     queryOne(db,
       'SELECT * FROM bills WHERE resident_id = ? AND status = "paid" ORDER BY paid_at DESC LIMIT 1',
       [residentId]
@@ -109,7 +110,7 @@ export async function importBillsFromExcel(db, buildingId, period, rows) {
     if (row.kw_amount) lineItems.push({ label: 'Snaga (kW)', amount: Number(row.kw_amount) });
     if (row.other_items) lineItems.push(...row.other_items);
 
-    const total = lineItems.reduce((s, i) => s + i.amount, 0);
+    const total = row.total_override != null ? row.total_override : lineItems.reduce((s, i) => s + i.amount, 0);
 
     if (existing) {
       await run(db,
@@ -171,8 +172,9 @@ function parseNalogFormat(rows) {
     }
 
     if (!byApt[apt]) byApt[apt] = { kwh_amount: 0, kw_amount: 0 };
-    if (svcId === 8) byApt[apt].kwh_amount += gross;
-    if (svcId === 44) byApt[apt].kw_amount += gross;
+    const sid = Number(svcId);
+    if (sid === 8 || sid === 72) byApt[apt].kwh_amount += gross;   // heating kWh (8) + cooling kWh (72)
+    if (sid === 44 || sid === 73) byApt[apt].kw_amount += gross;   // heating kW (44) + cooling kW (73)
   }
 
   return Object.entries(byApt).map(([apt, data]) => ({

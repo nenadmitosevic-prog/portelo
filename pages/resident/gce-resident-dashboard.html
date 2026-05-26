@@ -137,6 +137,7 @@
         <div class="header__logo" style="color:var(--accent)" id="buildingLogo">Green Comfort Energy</div>
         <div class="header__nav">
           <span class="header__apt" id="aptLabel"></span>
+          <button class="btn btn--outline btn--sm" onclick="openPinModal()">PIN</button>
           <button class="btn btn--outline btn--sm" onclick="logout()">Odjava</button>
         </div>
       </div>
@@ -350,6 +351,85 @@
     }
 
     load();
+
+    // ── PIN change modal ──────────────────────────────────────────────────────
+    function openPinModal() {
+      document.getElementById('pinCurrent').value = '';
+      document.getElementById('pinNew').value = '';
+      document.getElementById('pinConfirm').value = '';
+      const msg = document.getElementById('pinModalMsg');
+      msg.textContent = '';
+      msg.className = 'alert hidden';
+      document.getElementById('pinModal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('pinCurrent').focus(), 50);
+    }
+
+    function closePinModal() {
+      document.getElementById('pinModal').classList.add('hidden');
+    }
+
+    async function changePin() {
+      const current = document.getElementById('pinCurrent').value.trim();
+      const newPin  = document.getElementById('pinNew').value.trim();
+      const confirm = document.getElementById('pinConfirm').value.trim();
+      const msg = document.getElementById('pinModalMsg');
+      const btn = document.getElementById('pinSaveBtn');
+
+      function showMsg(text, type) {
+        msg.textContent = text;
+        msg.className = `alert alert--${type}`;
+      }
+
+      if (!current || !newPin || !confirm) return showMsg('Popunite sva polja.', 'error');
+      if (!/^\d{4,6}$/.test(newPin)) return showMsg('Novi PIN mora biti 4 do 6 cifara.', 'error');
+      if (newPin !== confirm) return showMsg('Novi PIN i potvrda se ne poklapaju.', 'error');
+
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/auth/change-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ current_pin: current, new_pin: newPin }),
+        });
+        const data = await res.json();
+        if (!res.ok) return showMsg(data.error || 'Greška. Pokušajte ponovo.', 'error');
+        showMsg('PIN uspešno promenjen!', 'success');
+        setTimeout(() => closePinModal(), 1500);
+      } catch {
+        showMsg('Greška. Pokušajte ponovo.', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closePinModal();
+    });
   </script>
+
+  <!-- PIN change modal -->
+  <div id="pinModal" class="modal-backdrop hidden" onclick="if(event.target===this)closePinModal()">
+    <div class="modal">
+      <div class="modal__title">Promeni PIN</div>
+      <div id="pinModalMsg" class="alert hidden"></div>
+      <div class="form-group">
+        <label class="label">Trenutni PIN</label>
+        <input class="input input--pin" type="password" id="pinCurrent" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="••••">
+      </div>
+      <div class="form-group">
+        <label class="label">Novi PIN (4–6 cifara)</label>
+        <input class="input input--pin" type="password" id="pinNew" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="••••">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="label">Potvrdi novi PIN</label>
+        <input class="input input--pin" type="password" id="pinConfirm" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="••••">
+      </div>
+      <div class="flex gap-2 mt-4" style="justify-content:flex-end">
+        <button class="btn btn--outline" onclick="closePinModal()">Otkaži</button>
+        <button class="btn btn--primary" id="pinSaveBtn" onclick="changePin()">Sačuvaj</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
